@@ -18,7 +18,7 @@ if [ ! -d "$HOME/pytorch-struct" ]; then
   pip install -e .
 fi
 
-cd $HOME/structure-meaning-learning-main/vc-pcfg
+cd /projects/def-eporte2/nicob0/structure-meaning-learning-main/vc-pcfg
 
 SEEDS=(91 214 527 627 1018)
 MODELS=("joint" "sem-first" "syn-first" "visual-labels")
@@ -47,7 +47,7 @@ python ./as_train.py \
   --encoder_file "$ENCODER_FILE" \
   --img_dim "$IMG_DIM" \
   --visual_mode \
-  --logger_name $HOME/structure-meaning-learning-main/runs/zh_small_${MODEL}_s${SEED} \
+  --logger_name /projects/def-eporte2/nicob0/structure-meaning-learning-main/runs/zh_small_${MODEL}_s${SEED} \
   --seed "$SEED" \
   --data_path "../preprocessed-data/abstractscenes_zh_small" \
   --skip_syntactic_bootstrapping \

@@ -20,7 +20,7 @@ if [ ! -d "$HOME/pytorch-struct" ]; then
   pip install -e .
 fi
 
-cd $HOME/structure-meaning-learning-main/vc-pcfg
+cd /projects/def-eporte2/nicob0/structure-meaning-learning-main/vc-pcfg
 
 python "data preprocessing/as_prepare_zh.py" \
   --input_caps "../preprocessed-data/abstractscenes/all_caps_zh.jsonl" \
