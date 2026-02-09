@@ -15,8 +15,9 @@ import sys
 # Allow importing vpcfg utils for vocab creation
 CURRENT_DIR = Path(__file__).resolve().parent
 VC_PCFG_DIR = CURRENT_DIR.parent
-sys.path.append(str(VC_PCFG_DIR))
-from vpcfg.utils import Vocabulary  # noqa: E402
+VPCFG_PKG_DIR = VC_PCFG_DIR / "vpcfg"
+sys.path.insert(0, str(VPCFG_PKG_DIR))
+from utils import Vocabulary  # noqa: E402
 
 
 TOK_MODEL = hanlp.pretrained.tok.COARSE_ELECTRA_SMALL_ZH
