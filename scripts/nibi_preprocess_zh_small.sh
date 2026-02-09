@@ -12,6 +12,8 @@ python -m venv ~/venvs/graminduct
 source ~/venvs/graminduct/bin/activate
 
 pip install --upgrade pip
+# Pin transformers <5 to keep encode_plus API for hanlp tokenizers
+pip install "transformers<5" "tokenizers<0.20"
 pip install hanlp opencc-python-reimplemented nltk torch torchvision torchaudio matplotlib
 
 if [ ! -d "$HOME/pytorch-struct" ]; then
