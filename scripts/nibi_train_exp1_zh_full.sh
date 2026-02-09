@@ -17,13 +17,13 @@ if [ ! -d "$HOME/pytorch-struct" ]; then
   pip install -e .
 fi
 
-cd /projects/def-eporte2/nicob0/structure-meaning-learning-main/vc-pcfg
+cd "$SLURM_SUBMIT_DIR/vc-pcfg"
 
 python ./as_train.py \
   --num_epochs 30 \
   --encoder_file "all_as-resn-50.npy" \
   --visual_mode \
-  --logger_name /projects/def-eporte2/nicob0/structure-meaning-learning-main/runs/zh_full_joint_s1018 \
+  --logger_name "$SLURM_SUBMIT_DIR/runs/zh_full_joint_s1018" \
   --seed 1018 \
   --data_path "../preprocessed-data/abstractscenes_zh" \
   --skip_syntactic_bootstrapping
