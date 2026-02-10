@@ -294,6 +294,7 @@ if __name__ == '__main__':
             train(opt, train_loader, model, epoch, syn_test_loader)
             # evaluate on validation set using VSE metrics
             rsum = semantic_bootstrapping_test(opt, sem_test_loader, model, logger, current_epoch)
+        if syn_test_loader is not None:
             score = syntactic_bootstrapping_test(opt, syn_test_loader, model, logger, current_epoch)
             # remember best R@ sum and save checkpoint
             is_best = rsum < best_rsum
