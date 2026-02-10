@@ -129,21 +129,22 @@ def parse_run_args(run_args):
         if "=" not in item:
             raise ValueError(f"Run spec must be label=path, got {item}")
         label, path = item.split("=", 1)
-        runs[label] = Path(path).resolve()
+        runs.setdefault(label, []).append(Path(path).resolve())
     return runs
 
 
 def group_runs(run_specs):
     grouped = {}
-    for label, run_dir in run_specs.items():
-        if not run_dir.exists():
-            raise FileNotFoundError(run_dir)
-        if run_dir.is_dir() and (run_dir / "semantic_bootstrapping_results").exists():
-            grouped.setdefault(label, {})[str(run_dir)] = {
-                int(p.stem): p for p in (run_dir / "semantic_bootstrapping_results").glob("*.csv")
-            }
-        else:
-            raise FileNotFoundError(f"Missing semantic_bootstrapping_results in {run_dir}")
+    for label, run_dirs in run_specs.items():
+        for run_dir in run_dirs:
+            if not run_dir.exists():
+                raise FileNotFoundError(run_dir)
+            if run_dir.is_dir() and (run_dir / "semantic_bootstrapping_results").exists():
+                grouped.setdefault(label, {})[str(run_dir)] = {
+                    int(p.stem): p for p in (run_dir / "semantic_bootstrapping_results").glob("*.csv")
+                }
+            else:
+                raise FileNotFoundError(f"Missing semantic_bootstrapping_results in {run_dir}")
     return grouped
 
 
