@@ -91,7 +91,8 @@ def build_curve(runs_by_label, max_epoch):
     curves = {}
     for label, runs in runs_by_label.items():
         epochs = sorted(next(iter(runs.values())).keys())
-        epochs = [e for e in epochs if e <= max_epoch]
+        # Drop the pre-training eval epoch (-1) so plots start at 0.
+        epochs = [e for e in epochs if 0 <= e <= max_epoch]
         means = []
         ses = []
         for e in epochs:
