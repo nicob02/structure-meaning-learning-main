@@ -1,6 +1,7 @@
 import json
 import pickle
 import os
+import sys
 from pathlib import Path
 from .utils import Vocabulary
 
@@ -58,7 +59,20 @@ def get_vocab(preprocessed_dir, vocab_size = 2000):
     if vocab_file in os.listdir(word_list_dir):
         vocab_file = word_list_dir / vocab_file
         with vocab_file.open("rb") as f:
-            vocab = pickle.load(f)
+            try:
+                vocab = pickle.load(f)
+            except ModuleNotFoundError as exc:
+                # Compatibility: older pickles may reference module name "utils"
+                if exc.name == "utils":
+                    vpcfg_dir = Path(__file__).resolve().parent
+                    if str(vpcfg_dir) not in sys.path:
+                        sys.path.insert(0, str(vpcfg_dir))
+                    import utils as utils_module  # type: ignore
+                    sys.modules["utils"] = utils_module
+                    f.seek(0)
+                    vocab = pickle.load(f)
+                else:
+                    raise
     elif word_list_file in os.listdir(word_list_dir):
         vocab = create_vocab(word_list_dir, word_list_file, vocab_file, vocab_size)
     else :
