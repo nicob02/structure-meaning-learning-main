@@ -19,6 +19,7 @@ if [ ! -d "$HOME/pytorch-struct" ]; then
 fi
 
 cd "$SLURM_SUBMIT_DIR/vc-pcfg"
+mkdir -p "$SLURM_SUBMIT_DIR/runs"
 
 SEEDS=(91 214 527 627 1018)
 MODELS=("joint" "sem-first" "syn-first" "visual-labels")

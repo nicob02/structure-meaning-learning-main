@@ -18,6 +18,7 @@ if [ ! -d "$HOME/pytorch-struct" ]; then
 fi
 
 cd "$SLURM_SUBMIT_DIR/vc-pcfg"
+mkdir -p "$SLURM_SUBMIT_DIR/runs"
 
 python ./as_train.py \
   --num_epochs 30 \
