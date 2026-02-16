@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --time=24:00:00
+#SBATCH --time=23:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
@@ -27,4 +27,5 @@ python ./as_train.py \
   --logger_name "$SLURM_SUBMIT_DIR/runs/zh_full_joint_s1018" \
   --seed 1018 \
   --data_path "../preprocessed-data/abstractscenes_zh" \
-  --skip_syntactic_bootstrapping
+  --skip_syntactic_bootstrapping \
+  --resume

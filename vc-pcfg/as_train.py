@@ -1,4 +1,5 @@
 import os
+import re
 import time, pickle, argparse, logging
 import numpy as np
 import torch
@@ -64,6 +65,8 @@ if __name__ == '__main__':
     #
     parser.add_argument('--seed', default=527, type=int, help='random seed')
     parser.add_argument('--model_init', default=None, type=str, help='checkpoint to initialize model with')
+    parser.add_argument('--resume', action='store_true',
+                        help='Resume from latest checkpoint in logger_name/checkpoints')
     #parser.add_argument('--w2vec_file', default=None, type=str, help='word vector file')
     parser.add_argument('--max_length', default=40, type=int, help='max sentence length')
     parser.add_argument('--prefix', default="all", type=str, help='prefix')
@@ -141,7 +144,9 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    handler = logging.FileHandler(os.path.join(opt.logger_name, 'train.log'), 'w')
+    log_path = os.path.join(opt.logger_name, 'train.log')
+    log_mode = 'a' if opt.resume and os.path.exists(log_path) else 'w'
+    handler = logging.FileHandler(log_path, log_mode)
     handler.setLevel(logging.INFO)
     handler.setFormatter(formatter)
     logger.addHandler(handler)
@@ -168,20 +173,45 @@ if __name__ == '__main__':
         from vpcfg.model_vis import VGCPCFGs 
     sampler = True
     model = VGCPCFGs(opt, vocab, logger)
-    if opt.model_init:
+    start_epoch = 0
+    best_rsum = float('inf')
+    resumed = False
+    if opt.resume:
+        ckpt_dir = os.path.join(opt.logger_name, 'checkpoints')
+        if os.path.isdir(ckpt_dir):
+            candidates = []
+            for name in os.listdir(ckpt_dir):
+                match = re.match(r'^(\d+)\.pth\.tar$', name)
+                if match:
+                    candidates.append((int(match.group(1)), os.path.join(ckpt_dir, name)))
+            if candidates:
+                _, ckpt_path = max(candidates, key=lambda x: x[0])
+                logger.info(f"Resuming from checkpoint: {ckpt_path}")
+                checkpoint = torch.load(ckpt_path, map_location='cpu')
+                model.set_state_dict(checkpoint['model'])
+                start_epoch = checkpoint['epoch'] + 1
+                best_rsum = checkpoint.get('best_rsum', best_rsum)
+                model.niter = checkpoint.get('Eiters', 0)
+                resumed = True
+            else:
+                logger.info("No numeric checkpoints found; starting from scratch.")
+        else:
+            logger.info("No checkpoint directory found; starting from scratch.")
+
+    if not resumed and opt.model_init:
         logger.info("override parser's params.")
         checkpoint = torch.load(opt.model_init, map_location='cpu')
-        parser_params = checkpoint['model'][Model.NS_PARSER]
+        parser_params = checkpoint['model'][VGCPCFGs.NS_PARSER]
         model.parser.load_state_dict(parser_params)
         start_epoch = checkpoint['epoch'] + 1
-    else:
+
+    if not resumed and not opt.model_init:
         save_checkpoint({
         'epoch': -1,
         'model': model.get_state_dict(),
         'best_rsum': -1,
         'opt': opt,
         'Eiters': -1 }, False, -1, prefix=opt.logger_name)
-        start_epoch = 0
 
     # Load data loaders
     data.set_constant(opt.visual_mode, opt.max_length)
