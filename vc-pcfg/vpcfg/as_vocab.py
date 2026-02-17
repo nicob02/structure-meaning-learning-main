@@ -35,6 +35,24 @@ def get_complete_word_list(preprocessed_data_path):
     write_word_list(ofile, vocab)
 
 
+def get_complete_word_list_from_caps(preprocessed_data_path, caps_file="all_caps.text"):
+    preprocessed_data_path = Path(preprocessed_data_path)
+    ofile = preprocessed_data_path / "complete_word_list_counts.json"
+    vocab = dict()
+    caps_path = preprocessed_data_path / caps_file
+    with caps_path.open("r") as fr:
+        for line in fr:
+            line = line.strip().lower()
+            if not line:
+                continue
+            for word in line.split(" "):
+                if word in vocab:
+                    vocab[word] += 1
+                else:
+                    vocab[word] = 1
+    write_word_list(ofile, vocab)
+
+
 def create_vocab(word_list_dir, word_list_file, vocab_file, vocab_size = 2000):
     vocab = Vocabulary()
     word_list_file = word_list_dir / word_list_file
@@ -76,7 +94,15 @@ def get_vocab(preprocessed_dir, vocab_size = 2000):
                     raise
     elif word_list_file in os.listdir(word_list_dir):
         vocab = create_vocab(word_list_dir, word_list_file, vocab_file, vocab_size)
-    else :
-        get_complete_word_list(preprocessed_dir)
+    else:
+        if (word_list_dir / "SimpleSentences1_clean.txt").exists():
+            get_complete_word_list(preprocessed_dir)
+        elif (word_list_dir / "all_caps.text").exists():
+            get_complete_word_list_from_caps(preprocessed_dir)
+        else:
+            raise FileNotFoundError(
+                f"Missing word list sources in {word_list_dir}. "
+                "Expected complete_word_list_counts.json or all_caps.text."
+            )
         vocab = create_vocab(word_list_dir, word_list_file, vocab_file, vocab_size)
     return vocab
