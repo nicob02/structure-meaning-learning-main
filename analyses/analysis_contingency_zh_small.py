@@ -77,8 +77,14 @@ def v_measure(df, beta=0.3):
 def load_df(path):
     df = pd.read_csv(path)
     df["syn_cat"] = df["gold_cat"].map(map_syn_cat)
-    df = df[df["syn_cat"].notna()].copy()
-    return df
+    mapped = df[df["syn_cat"].notna()].copy()
+    if mapped.empty:
+        tag_counts = df["gold_cat"].value_counts().head(20).to_dict()
+        raise ValueError(
+            f"No gold tags matched CTB9_MAP in {path}. "
+            f"Top gold tags: {tag_counts}"
+        )
+    return mapped
 
 
 def parse_model_seed(filename):
@@ -102,6 +108,8 @@ def build_figure(df_dir, seed, out_fig):
     if not rows:
         raise FileNotFoundError(f"No df_cats found for seed {seed} in {df_dir}")
     df_all = pd.concat(rows, ignore_index=True)
+    if df_all.empty:
+        raise ValueError(f"No mapped rows for seed {seed} in {df_dir}")
 
     syn_cats = list(CTB9_MAP.keys())
     pred_cats = [f"C{i}" for i in range(60)]
