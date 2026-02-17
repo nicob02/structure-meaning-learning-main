@@ -89,7 +89,8 @@ class VGCPCFGs(object):
         params, kl = self.parser(captions)
         dist = SentCFG(params, lengths=lengths)
         the_spans = dist.argmax[-1]
-        argmax_spans, trees, lprobs = utils.extract_parses(the_spans, lengths.tolist(), inc=0)
+        lengths_list = lengths.tolist() if hasattr(lengths, "tolist") else list(lengths)
+        argmax_spans, trees, lprobs = utils.extract_parses(the_spans, lengths_list, inc=0)
         ll, span_margs = dist.inside_im
         nll = -ll
         kl = torch.zeros_like(nll) if kl is None else kl
