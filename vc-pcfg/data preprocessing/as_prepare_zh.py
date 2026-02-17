@@ -194,6 +194,8 @@ def main():
             if tree is None:
                 error_count += 1
                 continue
+            # Capture POS tags before binarization/collapse to keep leaf tags.
+            pos_tags = [tag.split("-")[0].split("+")[0] for _, tag in tree.pos()]
             tree = binarize_tree(tree)
             tree_spans, tree_labels = tree_to_spans_and_labels(tree)
 
@@ -216,7 +218,6 @@ def main():
             ftext.write(caption + "\n")
             word_counts.update(tokens_trad)
 
-            pos_tags = [tag for _, tag in tree.pos()]
             json.dump([caption, tree_spans, tree_labels, pos_tags], fgold, ensure_ascii=False)
             fgold.write("\n")
 
