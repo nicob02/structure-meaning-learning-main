@@ -99,7 +99,7 @@ def main_get_trees_with_cat(opt):
     logger.addHandler(console)
     logger.propagate = False
     # load checkpoint
-    checkpoint = torch.load(opt.model_init, map_location='cpu')
+    checkpoint = torch.load(opt.model_init, map_location='cpu', weights_only=False)
     model_opt = checkpoint['opt']
     vocab = get_vocab(opt.data_path)
     model_opt.vocab_size = len(vocab)
@@ -206,7 +206,7 @@ def main_get_semantic_role_res(opt):
     logger.addHandler(console)
     logger.propagate = False
     # load checkpoint
-    checkpoint = torch.load(opt.model_init, map_location='cpu')
+    checkpoint = torch.load(opt.model_init, map_location='cpu', weights_only=False)
     epoch = checkpoint['epoch']
     model_opt = checkpoint['opt']
     vocab = get_vocab(opt.data_path)
