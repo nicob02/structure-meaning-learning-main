@@ -16,18 +16,22 @@ cd "$SLURM_SUBMIT_DIR/vc-pcfg"
 MODEL="${MODEL:-joint}"
 SEED="${SEED:-1018}"
 DATA_PATH="../preprocessed-data/abstractscenes_zh"
-EPOCH="${EPOCH:-29}"
+EPOCH="${EPOCH:-}"
 
 BASE_DIR="$SLURM_SUBMIT_DIR/results/parses/zh_full_one"
 OUT_DIR="$BASE_DIR/${MODEL}_${SEED}"
 mkdir -p "$OUT_DIR"
 
 RUN_DIR="$SLURM_SUBMIT_DIR/runs/zh_full_${MODEL}_s${SEED}"
-CKPT="$RUN_DIR/checkpoints/${EPOCH}.pth.tar"
+if [ -z "$EPOCH" ]; then
+  CKPT="$(ls -1 "$RUN_DIR"/checkpoints/*.pth.tar 2>/dev/null | sort -V | tail -n 1)"
+else
+  CKPT="$RUN_DIR/checkpoints/${EPOCH}.pth.tar"
+fi
 OUT_BASENAME="${MODEL}_${SEED}_parses.json"
 
-if [ ! -f "$CKPT" ]; then
-  echo "Missing checkpoint: $CKPT"
+if [ -z "$CKPT" ] || [ ! -f "$CKPT" ]; then
+  echo "Missing checkpoint in: $RUN_DIR/checkpoints"
   exit 1
 fi
 
