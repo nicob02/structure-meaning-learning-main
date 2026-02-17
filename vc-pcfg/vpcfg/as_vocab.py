@@ -12,7 +12,7 @@ def add_words(ifile, vocab):
             if not line:
                 break
             line = line.split("\t")[2]
-            line = line.strip().tolower().split(" ")
+            line = line.strip().lower().split(" ")
             for word in line:
               if word in vocab:
                 vocab[word] +=1
@@ -20,18 +20,19 @@ def add_words(ifile, vocab):
                 vocab[word] = 1
     return vocab
 
-def write_word_list(ofile):
+def write_word_list(ofile, vocab):
     with ofile.open("w") as fw:
         json.dump(vocab, fw)
 
 def get_complete_word_list(preprocessed_data_path):
+    preprocessed_data_path = Path(preprocessed_data_path)
     sentence_files = ["SimpleSentences1_clean.txt", "SimpleSentences2_clean.txt"]
     ofile = preprocessed_data_path / "complete_word_list_counts.json"
     vocab = dict()
 
     for ifile in sentence_files:
         vocab = add_words(preprocessed_data_path / ifile, vocab)
-    write_word_list(ofile)
+    write_word_list(ofile, vocab)
 
 
 def create_vocab(word_list_dir, word_list_file, vocab_file, vocab_size = 2000):
