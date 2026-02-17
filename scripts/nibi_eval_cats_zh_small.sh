@@ -23,17 +23,21 @@ mkdir -p "$PRED_DIR" "$DF_DIR" "$CT_DIR"
 SEEDS=(91 214 527 627 1018)
 MODELS=("joint" "sem-first" "syn-first" "visual-labels")
 DATA_PATH="../preprocessed-data/abstractscenes_zh_small"
-EPOCH=4
+EPOCH="${EPOCH:-}"
 
 for MODEL in "${MODELS[@]}"; do
   for SEED in "${SEEDS[@]}"; do
     RUN_DIR="$SLURM_SUBMIT_DIR/runs/zh_small_${MODEL}_s${SEED}"
-    CKPT="$RUN_DIR/checkpoints/${EPOCH}.pth.tar"
+    if [ -z "$EPOCH" ]; then
+      CKPT="$(ls -1 "$RUN_DIR"/checkpoints/*.pth.tar 2>/dev/null | sort -V | tail -n 1)"
+    else
+      CKPT="$RUN_DIR/checkpoints/${EPOCH}.pth.tar"
+    fi
     OUT_BASENAME="${MODEL}_${SEED}_parses.json"
     OUT_DIR="$PRED_DIR/${MODEL}_${SEED}"
 
-    if [ ! -f "$CKPT" ]; then
-      echo "Missing checkpoint: $CKPT"
+    if [ -z "$CKPT" ] || [ ! -f "$CKPT" ]; then
+      echo "Missing checkpoint in: $RUN_DIR/checkpoints"
       exit 1
     fi
 
