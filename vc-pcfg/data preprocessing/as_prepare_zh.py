@@ -3,6 +3,7 @@ import json
 import os
 import pickle
 import shutil
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -150,6 +151,8 @@ def main():
                         help="Use char spans from input jsonl instead of re-parsing")
     parser.add_argument("--limit", type=int, default=0,
                         help="If > 0, limit to first N sentences for a quick smoke test")
+    parser.add_argument("--log_every", type=int, default=500,
+                        help="Log progress every N sentences")
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -175,6 +178,8 @@ def main():
 
     word_counts = Counter()
     error_count = 0
+    start_time = time.time()
+    last_log_time = start_time
 
     with open(args.input_caps, "r", encoding="utf-8") as fin, \
         open(caps_out_path, "w", encoding="utf-8") as fout, \
@@ -220,6 +225,25 @@ def main():
 
             json.dump([caption, tree_spans, tree_labels, pos_tags], fgold, ensure_ascii=False)
             fgold.write("\n")
+
+            if args.log_every and (i + 1) % args.log_every == 0:
+                elapsed = time.time() - start_time
+                per_sent = elapsed / max(1, i + 1)
+                if args.limit:
+                    remaining = args.limit - (i + 1)
+                else:
+                    remaining = None
+                eta = per_sent * remaining if remaining is not None else None
+                if eta is not None:
+                    print(
+                        f"[{i+1}] elapsed={elapsed/60:.1f}m "
+                        f"speed={per_sent:.3f}s/sent eta={eta/60:.1f}m"
+                    )
+                else:
+                    print(
+                        f"[{i+1}] elapsed={elapsed/60:.1f}m "
+                        f"speed={per_sent:.3f}s/sent"
+                    )
 
     with open(ids_out_path, "w", encoding="utf-8") as f:
         for id_ in ids:
