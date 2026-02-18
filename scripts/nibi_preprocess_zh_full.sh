@@ -27,9 +27,12 @@ fi
 
 cd "$SLURM_SUBMIT_DIR/vc-pcfg"
 
+LOG_EVERY="${LOG_EVERY:-500}"
+
 python "data preprocessing/as_prepare_zh.py" \
   --input_caps "../preprocessed-data/abstractscenes/all_caps_zh.jsonl" \
   --input_ids "../preprocessed-data/abstractscenes/all.id_zh" \
   --output_dir "../preprocessed-data/abstractscenes_zh" \
   --copy_features_from "../preprocessed-data/abstractscenes" \
-  --use_existing_char_spans
+  --use_existing_char_spans \
+  --log_every "$LOG_EVERY"
