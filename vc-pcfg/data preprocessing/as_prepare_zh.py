@@ -153,19 +153,30 @@ def main():
                         help="If > 0, limit to first N sentences for a quick smoke test")
     parser.add_argument("--log_every", type=int, default=500,
                         help="Log progress every N sentences")
+    parser.add_argument("--start", type=int, default=0,
+                        help="Start index (0-based) for sharding")
+    parser.add_argument("--end", type=int, default=0,
+                        help="End index (exclusive) for sharding; 0 means no end")
     args = parser.parse_args()
 
+    print(f"Starting preprocessing with args: {args}", flush=True)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    print("Loading HanLP models...", flush=True)
     tok, parser_model = load_hanlp_models()
+    print("HanLP models loaded.", flush=True)
     t2s = OpenCC("t2s")
     s2t = OpenCC("s2t")
 
     ids = []
     with open(args.input_ids, "r", encoding="utf-8") as f:
         for i, line in enumerate(f):
-            if args.limit and i >= args.limit:
+            if i < args.start:
+                continue
+            if args.end and i >= args.end:
+                break
+            if args.limit and len(ids) >= args.limit:
                 break
             ids.append(line.strip())
 
@@ -185,10 +196,15 @@ def main():
         open(caps_out_path, "w", encoding="utf-8") as fout, \
         open(caps_text_path, "w", encoding="utf-8") as ftext, \
         open(gold_caps_path, "w", encoding="utf-8") as fgold:
+        processed = 0
         for i, line in enumerate(fin):
+            if i < args.start:
+                continue
+            if args.end and i >= args.end:
+                break
             if not line.strip():
                 continue
-            if args.limit and i >= args.limit:
+            if args.limit and processed >= args.limit:
                 break
             sent_trad, char_spans = json.loads(line)
             sent_simp = t2s.convert(sent_trad)
@@ -226,22 +242,23 @@ def main():
             json.dump([caption, tree_spans, tree_labels, pos_tags], fgold, ensure_ascii=False)
             fgold.write("\n")
 
-            if args.log_every and (i + 1) % args.log_every == 0:
+            processed += 1
+            if args.log_every and (processed % args.log_every == 0):
                 elapsed = time.time() - start_time
-                per_sent = elapsed / max(1, i + 1)
+                per_sent = elapsed / max(1, processed)
                 if args.limit:
-                    remaining = args.limit - (i + 1)
+                    remaining = args.limit - processed
                 else:
                     remaining = None
                 eta = per_sent * remaining if remaining is not None else None
                 if eta is not None:
                     print(
-                        f"[{i+1}] elapsed={elapsed/60:.1f}m "
+                        f"[{processed}] elapsed={elapsed/60:.1f}m "
                         f"speed={per_sent:.3f}s/sent eta={eta/60:.1f}m"
                     )
                 else:
                     print(
-                        f"[{i+1}] elapsed={elapsed/60:.1f}m "
+                        f"[{processed}] elapsed={elapsed/60:.1f}m "
                         f"speed={per_sent:.3f}s/sent"
                     )
 
