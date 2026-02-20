@@ -23,6 +23,10 @@ from utils import Vocabulary  # noqa: E402
 
 TOK_MODEL = hanlp.pretrained.tok.COARSE_ELECTRA_SMALL_ZH
 CON_MODEL = hanlp.pretrained.constituency.CTB9_CON_FULL_TAG_ERNIE_GRAM
+try:
+    POS_MODEL = hanlp.pretrained.pos.CTB9_POS_ELECTRA_SMALL
+except Exception:
+    POS_MODEL = ""
 
 
 def load_hanlp_models():
@@ -153,6 +157,8 @@ def main():
                         help="If > 0, limit to first N sentences for a quick smoke test")
     parser.add_argument("--log_every", type=int, default=500,
                         help="Log progress every N sentences")
+    parser.add_argument("--pos_model", default=POS_MODEL,
+                        help="HanLP POS model (CTB9). Leave empty to use parser tags.")
     parser.add_argument("--start", type=int, default=0,
                         help="Start index (0-based) for sharding")
     parser.add_argument("--end", type=int, default=0,
@@ -165,6 +171,9 @@ def main():
 
     print("Loading HanLP models...", flush=True)
     tok, parser_model = load_hanlp_models()
+    pos_tagger = None
+    if args.pos_model:
+        pos_tagger = hanlp.load(args.pos_model)
     print("HanLP models loaded.", flush=True)
     t2s = OpenCC("t2s")
     s2t = OpenCC("s2t")
@@ -216,7 +225,20 @@ def main():
                 error_count += 1
                 continue
             # Capture POS tags before binarization/collapse to keep leaf tags.
-            pos_tags = [tag.split("-")[0].split("+")[0] for _, tag in tree.pos()]
+            if pos_tagger is not None:
+                pos_out = pos_tagger(tokens_simp)
+                if isinstance(pos_out, list) and pos_out and isinstance(pos_out[0], list):
+                    pos_tags = pos_out[0]
+                else:
+                    pos_tags = pos_out
+            else:
+                pos_tags = [tag for _, tag in tree.pos()]
+            pos_tags = [tag.split("-")[0].split("+")[0] for tag in pos_tags]
+            if all(tag == "_" for tag in pos_tags):
+                raise RuntimeError(
+                    "POS tags are all '_' (no CTB9 POS). "
+                    "Please set --pos_model to a CTB9 POS tagger."
+                )
             tree = binarize_tree(tree)
             tree_spans, tree_labels = tree_to_spans_and_labels(tree)
 

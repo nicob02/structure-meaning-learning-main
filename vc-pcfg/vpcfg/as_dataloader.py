@@ -1,4 +1,17 @@
 import os, re, json, csv
+SPAN_MISMATCH_COUNT = 0
+SPAN_MISMATCH_LOG_EVERY = int(os.environ.get("SPAN_MISMATCH_LOG_EVERY", "200"))
+
+
+def _log_span_mismatch(cap_len, span_len, sent_id):
+    global SPAN_MISMATCH_COUNT
+    SPAN_MISMATCH_COUNT += 1
+    if SPAN_MISMATCH_LOG_EVERY > 0 and SPAN_MISMATCH_COUNT % SPAN_MISMATCH_LOG_EVERY == 0:
+        print(
+            f"[span-mismatch] count={SPAN_MISMATCH_COUNT} "
+            f"cap_len={cap_len} span_len={span_len} id={sent_id}",
+            flush=True,
+        )
 import numpy as np
 import random
 import torch
@@ -196,7 +209,12 @@ def collate_fun(data):
     for i, cap in enumerate(captions):
         cap_len = len(cap)
         targets[i, : cap_len] = cap[: cap_len]
-        indices[i, : cap_len - 1, :] = spans[i]
+        span_len = spans[i].shape[0]
+        if span_len != cap_len - 1:
+            _log_span_mismatch(cap_len, span_len, ids[i])
+        fill_len = min(cap_len - 1, span_len)
+        if fill_len > 0:
+            indices[i, : fill_len, :] = spans[i][: fill_len]
     return images, targets, lengths, ids, indices
     
 def bi_collate_fun(data):
@@ -218,11 +236,21 @@ def bi_collate_fun(data):
     for i, cap in enumerate(captions_transitive):
         cap_len = len(cap)
         targets_tr[i, : cap_len] = cap[: cap_len]
-        indices_tr[i, : cap_len - 1, :] = spans_transitive[i]
+        span_len = spans_transitive[i].shape[0]
+        if span_len != cap_len - 1:
+            _log_span_mismatch(cap_len, span_len, idx_transitive[i])
+        fill_len = min(cap_len - 1, span_len)
+        if fill_len > 0:
+            indices_tr[i, : fill_len, :] = spans_transitive[i][: fill_len]
     for i, cap in enumerate(captions_intransitive):
         cap_len = len(cap)
         targets_intr[i, : cap_len] = cap[: cap_len]
-        indices_intr[i, : cap_len - 1, :] = spans_intransitive[i]
+        span_len = spans_intransitive[i].shape[0]
+        if span_len != cap_len - 1:
+            _log_span_mismatch(cap_len, span_len, idx_intransitive[i])
+        fill_len = min(cap_len - 1, span_len)
+        if fill_len > 0:
+            indices_intr[i, : fill_len, :] = spans_intransitive[i][: fill_len]
     # targets are captions, indices are gold spans
     return images_tr, targets_tr, lengths_tr, idx_transitive, indices_tr, images_intr, targets_intr, lengths_intr, idx_intransitive, indices_intr
 
