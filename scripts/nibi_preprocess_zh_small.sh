@@ -29,5 +29,4 @@ python "data preprocessing/as_prepare_zh.py" \
   --input_ids "../preprocessed-data/abstractscenes/all.id_zh" \
   --output_dir "../preprocessed-data/abstractscenes_zh_small" \
   --copy_features_from "../preprocessed-data/abstractscenes" \
-  --use_existing_char_spans \
   --limit 1000

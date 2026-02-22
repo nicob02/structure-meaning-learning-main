@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --time=06:00:00
+#SBATCH --time=10:00:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --account=def-eporte2
@@ -42,7 +42,6 @@ PYTHONUNBUFFERED=1 python -u "data preprocessing/as_prepare_zh.py" \
   --input_ids "$INPUT_IDS" \
   --output_dir "$OUT_DIR" \
   --copy_features_from "$COPY_FROM" \
-  --use_existing_char_spans \
   --start "$START" \
   --end "$END" \
   --log_every "$LOG_EVERY"

@@ -198,6 +198,11 @@ def main():
 
     word_counts = Counter()
     error_count = 0
+    fallback_to_tree_count = 0
+    used_char_spans_count = 0
+    char_span_invalid_count = 0
+    tree_span_invalid_count = 0
+    pos_length_mismatch_count = 0
     start_time = time.time()
     last_log_time = start_time
 
@@ -234,6 +239,12 @@ def main():
             else:
                 pos_tags = [tag for _, tag in tree.pos()]
             pos_tags = [tag.split("-")[0].split("+")[0] for tag in pos_tags]
+            if len(pos_tags) != len(tokens_simp):
+                pos_length_mismatch_count += 1
+                if len(pos_tags) < len(tokens_simp):
+                    pos_tags = pos_tags + ["_"] * (len(tokens_simp) - len(pos_tags))
+                else:
+                    pos_tags = pos_tags[:len(tokens_simp)]
             if all(tag == "_" for tag in pos_tags):
                 raise RuntimeError(
                     "POS tags are all '_' (no CTB9 POS). "
@@ -248,10 +259,16 @@ def main():
                 spans = char_spans_to_token_spans(char_spans, token_offsets)
                 spans = sorted({tuple(span) for span in spans}, key=lambda x: (x[0], x[1]))
                 spans = [list(span) for span in spans]
+                if spans and len(spans) == max(0, len(tokens_trad) - 1):
+                    used_char_spans_count += 1
+                else:
+                    char_span_invalid_count += 1
 
             if not spans or len(spans) != max(0, len(tokens_trad) - 1):
                 spans = tree_spans
+                fallback_to_tree_count += 1
                 if len(spans) != max(0, len(tokens_trad) - 1):
+                    tree_span_invalid_count += 1
                     error_count += 1
                     continue
 
@@ -297,8 +314,23 @@ def main():
 
     copy_features(args.copy_features_from, output_dir)
 
+    total = processed
+    if total > 0:
+        print(
+            "Preprocess summary: "
+            f"processed={total}, "
+            f"used_char_spans={used_char_spans_count} ({used_char_spans_count/total:.2%}), "
+            f"fallback_to_tree={fallback_to_tree_count} ({fallback_to_tree_count/total:.2%}), "
+            f"char_span_invalid={char_span_invalid_count}, "
+            f"pos_len_mismatch={pos_length_mismatch_count}",
+            flush=True,
+        )
     if error_count:
-        print(f"Finished with {error_count} parsing/tokenization mismatches.")
+        print(
+            f"Finished with {error_count} dropped sentences "
+            f"(tree_span_invalid={tree_span_invalid_count}).",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":
