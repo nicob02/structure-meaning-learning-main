@@ -37,11 +37,31 @@ if [ "$SLURM_ARRAY_TASK_ID" -eq 0 ]; then
   COPY_FROM="../preprocessed-data/abstractscenes"
 fi
 
-PYTHONUNBUFFERED=1 python -u "data preprocessing/as_prepare_zh.py" \
-  --input_caps "$INPUT_CAPS" \
-  --input_ids "$INPUT_IDS" \
-  --output_dir "$OUT_DIR" \
-  --copy_features_from "$COPY_FROM" \
-  --start "$START" \
-  --end "$END" \
-  --log_every "$LOG_EVERY"
+MAX_RETRIES="${MAX_RETRIES:-3}"
+for ATTEMPT in $(seq 1 "$MAX_RETRIES"); do
+  echo "Shard $SLURM_ARRAY_TASK_ID attempt $ATTEMPT/$MAX_RETRIES (start=$START end=$END)"
+  if PYTHONUNBUFFERED=1 python -u "data preprocessing/as_prepare_zh.py" \
+    --input_caps "$INPUT_CAPS" \
+    --input_ids "$INPUT_IDS" \
+    --output_dir "$OUT_DIR" \
+    --copy_features_from "$COPY_FROM" \
+    --start "$START" \
+    --end "$END" \
+    --log_every "$LOG_EVERY"; then
+    echo "Shard $SLURM_ARRAY_TASK_ID succeeded on attempt $ATTEMPT."
+    exit 0
+  fi
+
+  echo "Shard $SLURM_ARRAY_TASK_ID failed on attempt $ATTEMPT."
+  # Remove partial shard outputs before retry to avoid merging incomplete files.
+  rm -f "$OUT_DIR/all_caps.json" \
+        "$OUT_DIR/all_caps.text" \
+        "$OUT_DIR/all_gold_caps.json" \
+        "$OUT_DIR/all.id" \
+        "$OUT_DIR/complete_word_list_counts.json" \
+        "$OUT_DIR/vocab_dict.pkl"
+  sleep $((30 * ATTEMPT))
+done
+
+echo "Shard $SLURM_ARRAY_TASK_ID failed after $MAX_RETRIES attempts."
+exit 1
