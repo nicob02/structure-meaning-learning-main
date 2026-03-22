@@ -14,12 +14,13 @@ cd "$SLURM_SUBMIT_DIR"
 
 OUT_DIR="${OUT_DIR:-results/span_f1/zh_full_all}"
 MAX_EPOCH="${MAX_EPOCH:-30}"
+RUN_PREFIX="${RUN_PREFIX:-zh_full}"
 mkdir -p "$OUT_DIR"
 
 RUN_ARGS=()
 for model in joint sem-first syn-first visual-labels; do
   for seed in 91 214 527 627 1018; do
-    run_dir="runs/zh_full_${model}_s${seed}"
+    run_dir="runs/${RUN_PREFIX}_${model}_s${seed}"
     if [ ! -d "$run_dir/semantic_bootstrapping_results" ]; then
       echo "Missing run outputs: $run_dir/semantic_bootstrapping_results"
       exit 1

@@ -21,6 +21,13 @@ fi
 
 cd "$SLURM_SUBMIT_DIR/vc-pcfg"
 mkdir -p "$SLURM_SUBMIT_DIR/runs"
+DATA_PATH="${DATA_PATH:-../preprocessed-data/abstractscenes_zh}"
+RUN_PREFIX="${RUN_PREFIX:-zh_full}"
+USE_RESUME="${USE_RESUME:-1}"
+RESUME_ARG=()
+if [ "$USE_RESUME" = "1" ]; then
+  RESUME_ARG+=(--resume)
+fi
 
 SEEDS=(91 214 527 627 1018)
 MODELS=("joint" "sem-first" "syn-first" "visual-labels")
@@ -49,9 +56,9 @@ python ./as_train.py \
   --encoder_file "$ENCODER_FILE" \
   --img_dim "$IMG_DIM" \
   --visual_mode \
-  --logger_name "$SLURM_SUBMIT_DIR/runs/zh_full_${MODEL}_s${SEED}" \
+  --logger_name "$SLURM_SUBMIT_DIR/runs/${RUN_PREFIX}_${MODEL}_s${SEED}" \
   --seed "$SEED" \
-  --data_path "../preprocessed-data/abstractscenes_zh" \
+  --data_path "$DATA_PATH" \
   --skip_syntactic_bootstrapping \
-  --resume \
+  "${RESUME_ARG[@]}" \
   $EXTRA_ARGS

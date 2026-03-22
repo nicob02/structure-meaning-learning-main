@@ -28,10 +28,22 @@ fi
 cd "$SLURM_SUBMIT_DIR/vc-pcfg"
 
 LOG_EVERY="${LOG_EVERY:-500}"
+VOCAB_SIZE="${VOCAB_SIZE:-2000}"
+KEEP_SIMPLIFIED_TOKENS="${KEEP_SIMPLIFIED_TOKENS:-0}"
+INPUT_CAPS="${INPUT_CAPS:-../preprocessed-data/abstractscenes/all_caps_zh.jsonl}"
+INPUT_IDS="${INPUT_IDS:-../preprocessed-data/abstractscenes/all.id_zh}"
+OUTPUT_DIR="${OUTPUT_DIR:-../preprocessed-data/abstractscenes_zh}"
+COPY_FEATURES_FROM="${COPY_FEATURES_FROM:-../preprocessed-data/abstractscenes}"
+EXTRA_PREP_ARGS=()
+if [ "$KEEP_SIMPLIFIED_TOKENS" = "1" ]; then
+  EXTRA_PREP_ARGS+=(--keep_simplified_tokens)
+fi
 
 PYTHONUNBUFFERED=1 python -u "data preprocessing/as_prepare_zh.py" \
-  --input_caps "../preprocessed-data/abstractscenes/all_caps_zh.jsonl" \
-  --input_ids "../preprocessed-data/abstractscenes/all.id_zh" \
-  --output_dir "../preprocessed-data/abstractscenes_zh" \
-  --copy_features_from "../preprocessed-data/abstractscenes" \
-  --log_every "$LOG_EVERY"
+  --input_caps "$INPUT_CAPS" \
+  --input_ids "$INPUT_IDS" \
+  --output_dir "$OUTPUT_DIR" \
+  --copy_features_from "$COPY_FEATURES_FROM" \
+  --vocab_size "$VOCAB_SIZE" \
+  --log_every "$LOG_EVERY" \
+  "${EXTRA_PREP_ARGS[@]}"

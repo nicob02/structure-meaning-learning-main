@@ -16,9 +16,11 @@ cd "$SLURM_SUBMIT_DIR/vc-pcfg"
 
 CHUNK_SIZE="${CHUNK_SIZE:-2000}"
 LOG_EVERY="${LOG_EVERY:-200}"
-INPUT_CAPS="../preprocessed-data/abstractscenes/all_caps_zh.jsonl"
-INPUT_IDS="../preprocessed-data/abstractscenes/all.id_zh"
-SHARDS_DIR="../preprocessed-data/abstractscenes_zh_shards"
+VOCAB_SIZE="${VOCAB_SIZE:-2000}"
+KEEP_SIMPLIFIED_TOKENS="${KEEP_SIMPLIFIED_TOKENS:-0}"
+INPUT_CAPS="${INPUT_CAPS:-../preprocessed-data/abstractscenes/all_caps_zh.jsonl}"
+INPUT_IDS="${INPUT_IDS:-../preprocessed-data/abstractscenes/all.id_zh}"
+SHARDS_DIR="${SHARDS_DIR:-../preprocessed-data/abstractscenes_zh_shards}"
 
 TOTAL=$(wc -l < "$INPUT_IDS")
 START=$((SLURM_ARRAY_TASK_ID * CHUNK_SIZE))
@@ -40,14 +42,20 @@ fi
 MAX_RETRIES="${MAX_RETRIES:-3}"
 for ATTEMPT in $(seq 1 "$MAX_RETRIES"); do
   echo "Shard $SLURM_ARRAY_TASK_ID attempt $ATTEMPT/$MAX_RETRIES (start=$START end=$END)"
+  EXTRA_PREP_ARGS=()
+  if [ "$KEEP_SIMPLIFIED_TOKENS" = "1" ]; then
+    EXTRA_PREP_ARGS+=(--keep_simplified_tokens)
+  fi
   if PYTHONUNBUFFERED=1 python -u "data preprocessing/as_prepare_zh.py" \
     --input_caps "$INPUT_CAPS" \
     --input_ids "$INPUT_IDS" \
     --output_dir "$OUT_DIR" \
     --copy_features_from "$COPY_FROM" \
+    --vocab_size "$VOCAB_SIZE" \
     --start "$START" \
     --end "$END" \
-    --log_every "$LOG_EVERY"; then
+    --log_every "$LOG_EVERY" \
+    "${EXTRA_PREP_ARGS[@]}"; then
     echo "Shard $SLURM_ARRAY_TASK_ID succeeded on attempt $ATTEMPT."
     exit 0
   fi

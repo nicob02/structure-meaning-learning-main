@@ -15,14 +15,15 @@ cd "$SLURM_SUBMIT_DIR/vc-pcfg"
 
 MODEL="${MODEL:-joint}"
 SEED="${SEED:-1018}"
-DATA_PATH="../preprocessed-data/abstractscenes_zh"
+DATA_PATH="${DATA_PATH:-../preprocessed-data/abstractscenes_zh}"
+RUN_PREFIX="${RUN_PREFIX:-zh_full}"
 EPOCH="${EPOCH:-}"
 
 BASE_DIR="$SLURM_SUBMIT_DIR/results/parses/zh_full_one"
 OUT_DIR="$BASE_DIR/${MODEL}_${SEED}"
 mkdir -p "$OUT_DIR"
 
-RUN_DIR="$SLURM_SUBMIT_DIR/runs/zh_full_${MODEL}_s${SEED}"
+RUN_DIR="$SLURM_SUBMIT_DIR/runs/${RUN_PREFIX}_${MODEL}_s${SEED}"
 if [ -z "$EPOCH" ]; then
   CKPT="$(ls -1 "$RUN_DIR"/checkpoints/*.pth.tar 2>/dev/null | sort -V | tail -n 1)"
 else

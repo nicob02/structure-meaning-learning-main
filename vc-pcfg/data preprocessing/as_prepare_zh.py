@@ -151,6 +151,14 @@ def main():
     parser.add_argument("--output_dir", required=True, help="Output dir for preprocessed-data/abstractscenes_zh")
     parser.add_argument("--vocab_size", default=2000, type=int)
     parser.add_argument("--copy_features_from", default="", help="Optional dir to copy image features from")
+    parser.add_argument(
+        "--keep_simplified_tokens",
+        action="store_true",
+        help=(
+            "Keep Simplified tokens in output captions/vocab instead of converting "
+            "tokens back to Traditional."
+        ),
+    )
     parser.add_argument("--use_existing_char_spans", action="store_true",
                         help="Use char spans from input jsonl instead of re-parsing")
     parser.add_argument("--limit", type=int, default=0,
@@ -224,6 +232,7 @@ def main():
             sent_simp = t2s.convert(sent_trad)
             tokens_simp = tok(sent_simp)
             tokens_trad = [s2t.convert(tok_) for tok_ in tokens_simp]
+            output_tokens = tokens_simp if args.keep_simplified_tokens else tokens_trad
 
             tree = hanlp_to_tree(parser_model, tokens_simp)
             if tree is None:
@@ -264,19 +273,19 @@ def main():
                 else:
                     char_span_invalid_count += 1
 
-            if not spans or len(spans) != max(0, len(tokens_trad) - 1):
+            if not spans or len(spans) != max(0, len(output_tokens) - 1):
                 spans = tree_spans
                 fallback_to_tree_count += 1
-                if len(spans) != max(0, len(tokens_trad) - 1):
+                if len(spans) != max(0, len(output_tokens) - 1):
                     tree_span_invalid_count += 1
                     error_count += 1
                     continue
 
-            caption = " ".join(tokens_trad)
+            caption = " ".join(output_tokens)
             json.dump([caption, spans], fout, ensure_ascii=False)
             fout.write("\n")
             ftext.write(caption + "\n")
-            word_counts.update(tokens_trad)
+            word_counts.update(output_tokens)
 
             json.dump([caption, tree_spans, tree_labels, pos_tags], fgold, ensure_ascii=False)
             fgold.write("\n")
