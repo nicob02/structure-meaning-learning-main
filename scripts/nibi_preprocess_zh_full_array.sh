@@ -18,6 +18,7 @@ CHUNK_SIZE="${CHUNK_SIZE:-2000}"
 LOG_EVERY="${LOG_EVERY:-200}"
 VOCAB_SIZE="${VOCAB_SIZE:-2000}"
 KEEP_SIMPLIFIED_TOKENS="${KEEP_SIMPLIFIED_TOKENS:-0}"
+STRIP_TERMINAL_PUNCT="${STRIP_TERMINAL_PUNCT:-0}"
 INPUT_CAPS="${INPUT_CAPS:-../preprocessed-data/abstractscenes/all_caps_zh.jsonl}"
 INPUT_IDS="${INPUT_IDS:-../preprocessed-data/abstractscenes/all.id_zh}"
 SHARDS_DIR="${SHARDS_DIR:-../preprocessed-data/abstractscenes_zh_shards}"
@@ -45,6 +46,9 @@ for ATTEMPT in $(seq 1 "$MAX_RETRIES"); do
   EXTRA_PREP_ARGS=()
   if [ "$KEEP_SIMPLIFIED_TOKENS" = "1" ]; then
     EXTRA_PREP_ARGS+=(--keep_simplified_tokens)
+  fi
+  if [ "$STRIP_TERMINAL_PUNCT" = "1" ]; then
+    EXTRA_PREP_ARGS+=(--strip_terminal_punct)
   fi
   if PYTHONUNBUFFERED=1 python -u "data preprocessing/as_prepare_zh.py" \
     --input_caps "$INPUT_CAPS" \

@@ -27,6 +27,15 @@ try:
     POS_MODEL = hanlp.pretrained.pos.CTB9_POS_ELECTRA_SMALL
 except Exception:
     POS_MODEL = ""
+TERMINAL_PUNCT = {"。", "！", "？", "!", "?", ".", "｡", "．", "…"}
+
+
+def strip_terminal_punct(text):
+    """Drop sentence-final punctuation that can dominate right-edge spans."""
+    out = text.rstrip()
+    while out and out[-1] in TERMINAL_PUNCT:
+        out = out[:-1].rstrip()
+    return out
 
 
 def load_hanlp_models():
@@ -159,6 +168,11 @@ def main():
             "tokens back to Traditional."
         ),
     )
+    parser.add_argument(
+        "--strip_terminal_punct",
+        action="store_true",
+        help="Strip sentence-final punctuation before tokenization/parsing.",
+    )
     parser.add_argument("--use_existing_char_spans", action="store_true",
                         help="Use char spans from input jsonl instead of re-parsing")
     parser.add_argument("--limit", type=int, default=0,
@@ -172,6 +186,11 @@ def main():
     parser.add_argument("--end", type=int, default=0,
                         help="End index (exclusive) for sharding; 0 means no end")
     args = parser.parse_args()
+    if args.strip_terminal_punct and args.use_existing_char_spans:
+        raise ValueError(
+            "--strip_terminal_punct is incompatible with --use_existing_char_spans "
+            "because character offsets change after stripping."
+        )
 
     print(f"Starting preprocessing with args: {args}", flush=True)
     output_dir = Path(args.output_dir)
@@ -211,6 +230,8 @@ def main():
     char_span_invalid_count = 0
     tree_span_invalid_count = 0
     pos_length_mismatch_count = 0
+    stripped_terminal_punct_count = 0
+    empty_after_strip_count = 0
     start_time = time.time()
     last_log_time = start_time
 
@@ -228,7 +249,16 @@ def main():
                 continue
             if args.limit and processed >= args.limit:
                 break
-            sent_trad, char_spans = json.loads(line)
+            sent_trad_raw, char_spans = json.loads(line)
+            sent_trad = sent_trad_raw
+            if args.strip_terminal_punct:
+                sent_trad = strip_terminal_punct(sent_trad_raw)
+                if sent_trad != sent_trad_raw:
+                    stripped_terminal_punct_count += 1
+                if not sent_trad:
+                    empty_after_strip_count += 1
+                    error_count += 1
+                    continue
             sent_simp = t2s.convert(sent_trad)
             tokens_simp = tok(sent_simp)
             tokens_trad = [s2t.convert(tok_) for tok_ in tokens_simp]
@@ -331,7 +361,9 @@ def main():
             f"used_char_spans={used_char_spans_count} ({used_char_spans_count/total:.2%}), "
             f"fallback_to_tree={fallback_to_tree_count} ({fallback_to_tree_count/total:.2%}), "
             f"char_span_invalid={char_span_invalid_count}, "
-            f"pos_len_mismatch={pos_length_mismatch_count}",
+            f"pos_len_mismatch={pos_length_mismatch_count}, "
+            f"stripped_terminal_punct={stripped_terminal_punct_count}, "
+            f"empty_after_strip={empty_after_strip_count}",
             flush=True,
         )
     if error_count:

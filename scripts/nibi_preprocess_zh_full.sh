@@ -30,6 +30,7 @@ cd "$SLURM_SUBMIT_DIR/vc-pcfg"
 LOG_EVERY="${LOG_EVERY:-500}"
 VOCAB_SIZE="${VOCAB_SIZE:-2000}"
 KEEP_SIMPLIFIED_TOKENS="${KEEP_SIMPLIFIED_TOKENS:-0}"
+STRIP_TERMINAL_PUNCT="${STRIP_TERMINAL_PUNCT:-0}"
 INPUT_CAPS="${INPUT_CAPS:-../preprocessed-data/abstractscenes/all_caps_zh.jsonl}"
 INPUT_IDS="${INPUT_IDS:-../preprocessed-data/abstractscenes/all.id_zh}"
 OUTPUT_DIR="${OUTPUT_DIR:-../preprocessed-data/abstractscenes_zh}"
@@ -37,6 +38,9 @@ COPY_FEATURES_FROM="${COPY_FEATURES_FROM:-../preprocessed-data/abstractscenes}"
 EXTRA_PREP_ARGS=()
 if [ "$KEEP_SIMPLIFIED_TOKENS" = "1" ]; then
   EXTRA_PREP_ARGS+=(--keep_simplified_tokens)
+fi
+if [ "$STRIP_TERMINAL_PUNCT" = "1" ]; then
+  EXTRA_PREP_ARGS+=(--strip_terminal_punct)
 fi
 
 PYTHONUNBUFFERED=1 python -u "data preprocessing/as_prepare_zh.py" \
