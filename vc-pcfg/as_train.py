@@ -126,6 +126,16 @@ if __name__ == '__main__':
     parser.add_argument('--vse_lm_alpha', type=float, default=1.0,  help='weight parameter for  loss')
     parser.add_argument('--sem_first', action='store_true', help='Run semantics first model')
     parser.add_argument('--syn_first', action='store_true', help='Run syntax first model')
+    parser.add_argument('--switch_epoch', type=int, default=-1,
+                        help='Epoch at which staged training switches phase. -1 means num_epochs/2.')
+    parser.add_argument('--phase1_vse_mt_alpha', type=float, default=None,
+                        help='Optional phase-1 matching loss weight for sem_first/syn_first.')
+    parser.add_argument('--phase1_vse_lm_alpha', type=float, default=None,
+                        help='Optional phase-1 syntax/LM loss weight for sem_first/syn_first.')
+    parser.add_argument('--phase2_vse_mt_alpha', type=float, default=None,
+                        help='Optional phase-2 matching loss weight for sem_first/syn_first.')
+    parser.add_argument('--phase2_vse_lm_alpha', type=float, default=None,
+                        help='Optional phase-2 syntax/LM loss weight for sem_first/syn_first.')
     parser.add_argument('--skip_syntactic_bootstrapping', action='store_true',
                         help='Skip syntactic bootstrapping evaluation and data split')
 
@@ -229,12 +239,22 @@ if __name__ == '__main__':
         if not opt.skip_syntactic_bootstrapping:
             syntactic_bootstrapping_test(opt, syn_test_loader, model, logger, -1)
     best_rsum = float('inf')
+    switch_epoch = int(opt.num_epochs / 2) if opt.switch_epoch < 0 else opt.switch_epoch
+    switch_epoch = max(0, min(opt.num_epochs, switch_epoch))
+    logger.info(f"Loss schedule switch_epoch={switch_epoch}")
     
     if opt.sem_first:
-        model.vse_mt_alpha = 1.0
-        model.vse_lm_alpha = 0.0
-        logger.info("Training model on semantics loss first.")
-        for epoch in range(int(opt.num_epochs/2)):
+        p1_mt = 1.0 if opt.phase1_vse_mt_alpha is None else opt.phase1_vse_mt_alpha
+        p1_lm = 0.0 if opt.phase1_vse_lm_alpha is None else opt.phase1_vse_lm_alpha
+        p2_mt = 1.0 if opt.phase2_vse_mt_alpha is None else opt.phase2_vse_mt_alpha
+        p2_lm = 1.0 if opt.phase2_vse_lm_alpha is None else opt.phase2_vse_lm_alpha
+        model.vse_mt_alpha = p1_mt
+        model.vse_lm_alpha = p1_lm
+        logger.info(
+            f"Training model on phase-1 loss (sem-first): "
+            f"vse_mt_alpha={model.vse_mt_alpha}, vse_lm_alpha={model.vse_lm_alpha}"
+        )
+        for epoch in range(switch_epoch):
             current_epoch = start_epoch + epoch
             # train for one epoch
             train(opt, train_loader, model, epoch, sem_test_loader)
@@ -252,10 +272,13 @@ if __name__ == '__main__':
                 'opt': opt,
                 'Eiters': model.niter,
             }, is_best, current_epoch, prefix=opt.logger_name)
-        model.vse_mt_alpha = 1.0
-        model.vse_lm_alpha = 1.0
-        logger.info("Training model on syntax loss second.")
-        for epoch in range(int(opt.num_epochs/2), opt.num_epochs):
+        model.vse_mt_alpha = p2_mt
+        model.vse_lm_alpha = p2_lm
+        logger.info(
+            f"Training model on phase-2 loss (sem-first): "
+            f"vse_mt_alpha={model.vse_mt_alpha}, vse_lm_alpha={model.vse_lm_alpha}"
+        )
+        for epoch in range(switch_epoch, opt.num_epochs):
             current_epoch = start_epoch + epoch
             # train for one epoch
             train(opt, train_loader, model, epoch, sem_test_loader)
@@ -275,10 +298,17 @@ if __name__ == '__main__':
             }, is_best, current_epoch, prefix=opt.logger_name)
         
     elif opt.syn_first:
-        model.vse_mt_alpha = 0.0
-        model.vse_lm_alpha = 1.0
-        logger.info("Training model on syntax loss first.")
-        for epoch in range(int(opt.num_epochs/2)):
+        p1_mt = 0.0 if opt.phase1_vse_mt_alpha is None else opt.phase1_vse_mt_alpha
+        p1_lm = 1.0 if opt.phase1_vse_lm_alpha is None else opt.phase1_vse_lm_alpha
+        p2_mt = 1.0 if opt.phase2_vse_mt_alpha is None else opt.phase2_vse_mt_alpha
+        p2_lm = 1.0 if opt.phase2_vse_lm_alpha is None else opt.phase2_vse_lm_alpha
+        model.vse_mt_alpha = p1_mt
+        model.vse_lm_alpha = p1_lm
+        logger.info(
+            f"Training model on phase-1 loss (syn-first): "
+            f"vse_mt_alpha={model.vse_mt_alpha}, vse_lm_alpha={model.vse_lm_alpha}"
+        )
+        for epoch in range(switch_epoch):
             current_epoch = start_epoch + epoch
             # train for one epoch
             train(opt, train_loader, model, epoch, sem_test_loader)
@@ -296,10 +326,13 @@ if __name__ == '__main__':
                 'opt': opt,
                 'Eiters': model.niter,
             }, is_best, current_epoch, prefix=opt.logger_name)
-        model.vse_mt_alpha = 1.0
-        model.vse_lm_alpha = 1.0
-        logger.info("Training model on semantics loss second.")
-        for epoch in range(int(opt.num_epochs/2), opt.num_epochs):
+        model.vse_mt_alpha = p2_mt
+        model.vse_lm_alpha = p2_lm
+        logger.info(
+            f"Training model on phase-2 loss (syn-first): "
+            f"vse_mt_alpha={model.vse_mt_alpha}, vse_lm_alpha={model.vse_lm_alpha}"
+        )
+        for epoch in range(switch_epoch, opt.num_epochs):
             current_epoch = start_epoch + epoch
             # train for one epoch
             train(opt, train_loader, model, epoch, sem_test_loader)
@@ -318,6 +351,12 @@ if __name__ == '__main__':
                 'Eiters': model.niter,
             }, is_best, current_epoch, prefix=opt.logger_name)
     else:
+        model.vse_mt_alpha = opt.vse_mt_alpha
+        model.vse_lm_alpha = opt.vse_lm_alpha
+        logger.info(
+            f"Training model with joint loss: "
+            f"vse_mt_alpha={model.vse_mt_alpha}, vse_lm_alpha={model.vse_lm_alpha}"
+        )
         for epoch in range(opt.num_epochs):
             current_epoch = start_epoch + epoch
             # train for one epoch
