@@ -47,6 +47,17 @@ def train(opt, train_loader, model, epoch, val_loader=None):
         if model.niter % opt.val_step == 0 and val_loader is not None:
             semantic_bootstrapping_test(opt, val_loader, model, logger, epoch, save=False)
 
+    if "MT-Loss" in train_logger.meters:
+        mt = train_logger.meters["MT-Loss"].avg
+        ll = train_logger.meters["LL-Loss"].avg
+        kl = train_logger.meters["KL-Loss"].avg
+        logger.info(
+            "Epoch [%d] raw (unweighted) train losses — "
+            "MT(semantic): %.4f, NLL(syntax): %.4f, KL(syntax): %.4f, "
+            "Syntax_total(NLL+KL): %.4f",
+            epoch, mt, ll, kl, ll + kl
+        )
+
 if __name__ == '__main__':
     # hyper parameters
     parser = argparse.ArgumentParser()

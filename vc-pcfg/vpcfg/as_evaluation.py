@@ -272,9 +272,9 @@ def semantic_bootstrapping_test(opt, sem_data_loader, model, logger, current_epo
     gold_spans = []
     for i, (images, captions, lengths, ids, spans) in enumerate(sem_data_loader):
         model.logger = val_logger
+        if isinstance(lengths, list):
+            lengths = torch.tensor(lengths).long()
         if torch.cuda.is_available():
-            if isinstance(lengths, list):
-                lengths = torch.tensor(lengths).long()
             lengths = lengths.cuda()
             captions = captions.cuda()
         bsize = captions.size(0) 
