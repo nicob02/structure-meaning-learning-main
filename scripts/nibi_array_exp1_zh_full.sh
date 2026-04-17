@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --time=09:00:00
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --gres=gpu:a100:1
+#SBATCH --mem=32G
+#SBATCH --gres=gpu:t4:1
 #SBATCH --array=0-19
 #SBATCH --account=def-eporte2
 
