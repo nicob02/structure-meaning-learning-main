@@ -3,7 +3,6 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:h100:1
-#SBATCH --partition=gpubase_bygpu_b1
 #SBATCH --array=0-19
 #SBATCH --account=def-eporte2
 
