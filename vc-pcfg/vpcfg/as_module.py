@@ -30,6 +30,7 @@ class CompoundCFG(torch.nn.Module):
         self.T = T
         self.z_dim = z_dim
         self.s_dim = s_dim
+        self.temperature = 1.0
 
         self.root_emb = nn.Parameter(torch.randn(1, s_dim))
         self.term_emb = nn.Parameter(torch.randn(T, s_dim))
@@ -84,11 +85,13 @@ class CompoundCFG(torch.nn.Module):
             kl = None
         self.z = z
 
+        temp = max(1e-4, float(self.temperature))
+
         def roots():
             root_emb = self.root_emb.expand(b, self.s_dim)
             if self.z_dim > 0:
                 root_emb = torch.cat([root_emb, self.z], -1)
-            root_prob = F.log_softmax(self.root_mlp(root_emb), -1)
+            root_prob = F.log_softmax(self.root_mlp(root_emb) / temp, -1)
             return root_prob
         
         def terms():
@@ -100,7 +103,7 @@ class CompoundCFG(torch.nn.Module):
                     b, n, self.T, self.z_dim
                 )
                 term_emb = torch.cat([term_emb, z_expand], -1)
-            term_prob = F.log_softmax(self.term_mlp(term_emb), -1)
+            term_prob = F.log_softmax(self.term_mlp(term_emb) / temp, -1)
             indices = x.unsqueeze(2).expand(b, n, self.T).unsqueeze(3)
             term_prob = torch.gather(term_prob, 3, indices).squeeze(3)
             return term_prob
@@ -114,7 +117,7 @@ class CompoundCFG(torch.nn.Module):
                     b, self.NT, self.z_dim
                 )
                 nonterm_emb = torch.cat([nonterm_emb, z_expand], -1)
-            rule_prob = F.log_softmax(self.rule_mlp(nonterm_emb), -1)
+            rule_prob = F.log_softmax(self.rule_mlp(nonterm_emb) / temp, -1)
             rule_prob = rule_prob.view(b, self.NT, self.NT_T, self.NT_T)
             return rule_prob
 

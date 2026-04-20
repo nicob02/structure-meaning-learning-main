@@ -32,6 +32,16 @@ PHASE1_VSE_LM_ALPHA="${PHASE1_VSE_LM_ALPHA:-}"
 PHASE2_VSE_MT_ALPHA="${PHASE2_VSE_MT_ALPHA:-}"
 PHASE2_VSE_LM_ALPHA="${PHASE2_VSE_LM_ALPHA:-}"
 NUM_EPOCHS="${NUM_EPOCHS:-30}"
+USE_STRUCT_NEG="${USE_STRUCT_NEG:-0}"
+STRUCT_NEG_MARGIN="${STRUCT_NEG_MARGIN:-}"
+STRUCT_NEG_WEIGHT="${STRUCT_NEG_WEIGHT:-}"
+USE_MI_REG="${USE_MI_REG:-0}"
+MI_MARGIN="${MI_MARGIN:-}"
+MI_WEIGHT="${MI_WEIGHT:-}"
+USE_TEMP_ANNEAL="${USE_TEMP_ANNEAL:-0}"
+TEMP_START="${TEMP_START:-}"
+TEMP_END="${TEMP_END:-}"
+TEMP_ANNEAL_FRAC="${TEMP_ANNEAL_FRAC:-}"
 RESUME_ARG=()
 if [ "$USE_RESUME" = "1" ]; then
   RESUME_ARG+=(--resume)
@@ -51,6 +61,23 @@ if [ -n "$PHASE2_VSE_MT_ALPHA" ]; then
 fi
 if [ -n "$PHASE2_VSE_LM_ALPHA" ]; then
   LOSS_ARGS+=(--phase2_vse_lm_alpha "$PHASE2_VSE_LM_ALPHA")
+fi
+EXTRA_OBJ_ARGS=()
+if [ "$USE_STRUCT_NEG" = "1" ]; then
+  EXTRA_OBJ_ARGS+=(--use_structural_negatives)
+  [ -n "$STRUCT_NEG_MARGIN" ] && EXTRA_OBJ_ARGS+=(--struct_neg_margin "$STRUCT_NEG_MARGIN")
+  [ -n "$STRUCT_NEG_WEIGHT" ] && EXTRA_OBJ_ARGS+=(--struct_neg_weight "$STRUCT_NEG_WEIGHT")
+fi
+if [ "$USE_MI_REG" = "1" ]; then
+  EXTRA_OBJ_ARGS+=(--use_mi_regularizer)
+  [ -n "$MI_MARGIN" ] && EXTRA_OBJ_ARGS+=(--mi_margin "$MI_MARGIN")
+  [ -n "$MI_WEIGHT" ] && EXTRA_OBJ_ARGS+=(--mi_weight "$MI_WEIGHT")
+fi
+if [ "$USE_TEMP_ANNEAL" = "1" ]; then
+  EXTRA_OBJ_ARGS+=(--use_temperature_annealing)
+  [ -n "$TEMP_START" ] && EXTRA_OBJ_ARGS+=(--temp_start "$TEMP_START")
+  [ -n "$TEMP_END" ] && EXTRA_OBJ_ARGS+=(--temp_end "$TEMP_END")
+  [ -n "$TEMP_ANNEAL_FRAC" ] && EXTRA_OBJ_ARGS+=(--temp_anneal_frac "$TEMP_ANNEAL_FRAC")
 fi
 
 SEEDS=(91 214 527 627 1018)
@@ -84,6 +111,7 @@ python ./as_train.py \
   --seed "$SEED" \
   --data_path "$DATA_PATH" \
   "${LOSS_ARGS[@]}" \
+  "${EXTRA_OBJ_ARGS[@]}" \
   --skip_syntactic_bootstrapping \
   "${RESUME_ARG[@]}" \
   $EXTRA_ARGS

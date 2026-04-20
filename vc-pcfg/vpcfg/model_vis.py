@@ -2,6 +2,7 @@ import time
 import numpy as np
 
 import torch
+import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 from torch.nn.utils.clip_grad import clip_grad_norm_
 from torch_struct import SentCFG
@@ -25,6 +26,13 @@ class VGCPCFGs(object):
         self.vse_mt_alpha = opt.vse_mt_alpha
         self.vse_lm_alpha = opt.vse_lm_alpha
         self.sem_first = opt.sem_first
+
+        self.use_structural_negatives = getattr(opt, 'use_structural_negatives', False)
+        self.struct_neg_margin = getattr(opt, 'struct_neg_margin', 0.1)
+        self.struct_neg_weight = getattr(opt, 'struct_neg_weight', 1.0)
+        self.use_mi_regularizer = getattr(opt, 'use_mi_regularizer', False)
+        self.mi_margin = getattr(opt, 'mi_margin', 0.1)
+        self.mi_weight = getattr(opt, 'mi_weight', 1.0)
 
         self.loss_criterion = ContrastiveLoss(margin=opt.margin)
 
@@ -107,41 +115,38 @@ class VGCPCFGs(object):
             txt_outputs = self.txt_enc(captions, lengths, parser_outs[-3])
         return (img_emb, txt_outputs) + parser_outs
 
+    def _expected_matching_loss(self, img_emb, cap_span_features, span_margs, nstep):
+        """Compute the expected span-level matching loss given arbitrary span_margs.
+        Reused for the regular matching loss, structural negatives (shuffled margs),
+        and the MI regularizer (uniform margs)."""
+        b = img_emb.size(0)
+        matching_loss_matrix = torch.zeros(b, nstep, device=img_emb.device)
+        for k in range(nstep):
+            cap_emb = cap_span_features[:, k]
+            cap_marg = span_margs[:, k].softmax(-1).unsqueeze(-2)
+            cap_emb = torch.matmul(cap_marg, cap_emb).squeeze(-2)
+            cap_emb = utils.l2norm(cap_emb)
+            loss = self.loss_criterion(img_emb, cap_emb)
+            matching_loss_matrix[:, k] = loss
+        span_margs_summed = span_margs.sum(-1)
+        expected = (span_margs_summed[:, :nstep] * matching_loss_matrix).sum(-1)
+        return expected
+
     def forward_loss(self, base_img_emb, cap_span_features, lengths, span_bounds, span_margs):
         b = base_img_emb.size(0)
         N = lengths.max(0)[0]
         nstep = int(N * (N - 1) / 2)
         mstep = (lengths * (lengths - 1) / 2).int()
-        # focus on only short spans
-####################################################################
-        #nstep = int(mstep.float().mean().item() / 2)
-        matching_loss_matrix = torch.zeros(
-                b, nstep, device=base_img_emb.device
-            )
         img_emb = base_img_emb
         # If doing semantics first only consider the matching loss between complete caption embedding and images (not intermediate spans as well)
         if self.sem_first and self.vse_lm_alpha == 0.0:
             cap_emb = torch.cat([cap_span_features[j][k - 1].unsqueeze(0) for j, k in enumerate(mstep)], dim=0)
             cap_emb = cap_emb.sum(-2)
-            #cap_marg = torch.softmax(torch.cat([span_margs[j][k - 1].unsqueeze(0) for j, k in enumerate(mstep)], dim=0), -1)
-            #cap_emb = torch.bmm(cap_marg.unsqueeze(-2),  cap_emb).squeeze(-2)
             cap_emb = utils.l2norm(cap_emb)
             loss = self.loss_criterion(img_emb, cap_emb)
-            #cap_margs = torch.cat([span_margs[j][k - 1].unsqueeze(0) for j, k in enumerate(mstep)], dim=0).sum(-1)
-            #expected_loss = cap_margs * loss
-            #expected_loss = expected_loss.sum(-1)
             expected_loss = loss.sum(-1)
         else:
-            for k in range(nstep):
-                cap_emb = cap_span_features[:, k]
-                cap_marg = span_margs[:, k].softmax(-1).unsqueeze(-2)
-                cap_emb = torch.matmul(cap_marg, cap_emb).squeeze(-2)
-                cap_emb = utils.l2norm(cap_emb)
-                loss = self.loss_criterion(img_emb, cap_emb)
-                matching_loss_matrix[:, k] = loss
-            span_margs = span_margs.sum(-1)
-            expected_loss = span_margs[:, : nstep] * matching_loss_matrix
-        expected_loss = expected_loss.sum(-1)
+            expected_loss = self._expected_matching_loss(img_emb, cap_span_features, span_margs, nstep)
         return expected_loss
 
     def forward(self, images, captions, lengths, ids=None, spans=None, epoch=None, *args):
@@ -172,7 +177,38 @@ class VGCPCFGs(object):
         ll_loss = nll.sum()
         kl_loss = kl.sum()
 
-        loss = (self.vse_mt_alpha * mt_loss + self.vse_lm_alpha * (ll_loss + kl_loss)) / bsize
+        struct_neg_term = torch.tensor(0.0, device=nll.device)
+        mi_term = torch.tensor(0.0, device=nll.device)
+        only_joint_path = not (self.sem_first and self.vse_lm_alpha == 0.0)
+        if only_joint_path and (self.use_structural_negatives or self.use_mi_regularizer):
+            N = lengths.max(0)[0]
+            nstep = int(N * (N - 1) / 2)
+            if self.use_structural_negatives and bsize > 1:
+                perm = torch.randperm(bsize, device=span_margs.device)
+                while bool((perm == torch.arange(bsize, device=span_margs.device)).all()):
+                    perm = torch.randperm(bsize, device=span_margs.device)
+                shuffled_margs = span_margs[perm]
+                shuffled_loss = self._expected_matching_loss(
+                    img_emb, cap_span_features, shuffled_margs, nstep
+                )
+                struct_neg_term = F.relu(
+                    self.struct_neg_margin + matching_loss - shuffled_loss
+                ).sum()
+            if self.use_mi_regularizer:
+                uniform_margs = torch.ones_like(span_margs) / span_margs.size(-1)
+                uniform_loss = self._expected_matching_loss(
+                    img_emb, cap_span_features, uniform_margs, nstep
+                )
+                mi_term = F.relu(
+                    self.mi_margin + matching_loss - uniform_loss
+                ).sum()
+
+        loss = (
+            self.vse_mt_alpha * mt_loss
+            + self.vse_lm_alpha * (ll_loss + kl_loss)
+            + self.struct_neg_weight * struct_neg_term
+            + self.mi_weight * mi_term
+        ) / bsize
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -184,6 +220,12 @@ class VGCPCFGs(object):
         self.logger.update('MT-Loss', mt_loss.item() / bsize, bsize)
         self.logger.update('KL-Loss', kl_loss.item() / bsize, bsize)
         self.logger.update('LL-Loss', ll_loss.item() / bsize, bsize)
+        if self.use_structural_negatives:
+            self.logger.update('StructNeg-Loss', struct_neg_term.item() / bsize, bsize)
+        if self.use_mi_regularizer:
+            self.logger.update('MI-Loss', mi_term.item() / bsize, bsize)
+        if hasattr(self.parser, 'temperature'):
+            self.logger.update('Temp', float(self.parser.temperature))
 
         self.n_word += (lengths + 1).sum().item()
         self.n_sent += bsize

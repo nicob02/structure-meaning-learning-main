@@ -22,6 +22,13 @@ def train(opt, train_loader, model, epoch, val_loader=None):
     model.n_sent = 0
     model.s_time = end
     model.all_stats = [[0., 0., 0.]]
+
+    if getattr(opt, 'use_temperature_annealing', False) and hasattr(model, 'parser'):
+        anneal_span = max(1.0, opt.num_epochs * opt.temp_anneal_frac)
+        frac = min(1.0, max(0.0, epoch / anneal_span))
+        new_temp = opt.temp_start + (opt.temp_end - opt.temp_start) * frac
+        model.parser.temperature = float(new_temp)
+        logger.info(f"Epoch [{epoch}] PCFG temperature set to {new_temp:.4f}")
     for i, train_data in enumerate(train_loader):
         # Always reset to train mode
         model.train()
@@ -51,11 +58,18 @@ def train(opt, train_loader, model, epoch, val_loader=None):
         mt = train_logger.meters["MT-Loss"].avg
         ll = train_logger.meters["LL-Loss"].avg
         kl = train_logger.meters["KL-Loss"].avg
+        extra = ""
+        if "StructNeg-Loss" in train_logger.meters:
+            extra += f", StructNeg: {train_logger.meters['StructNeg-Loss'].avg:.4f}"
+        if "MI-Loss" in train_logger.meters:
+            extra += f", MI: {train_logger.meters['MI-Loss'].avg:.4f}"
+        if "Temp" in train_logger.meters:
+            extra += f", Temp: {train_logger.meters['Temp'].val:.3f}"
         logger.info(
             "Epoch [%d] raw (unweighted) train losses — "
             "MT(semantic): %.4f, NLL(syntax): %.4f, KL(syntax): %.4f, "
-            "Syntax_total(NLL+KL): %.4f",
-            epoch, mt, ll, kl, ll + kl
+            "Syntax_total(NLL+KL): %.4f%s",
+            epoch, mt, ll, kl, ll + kl, extra
         )
 
 if __name__ == '__main__':
@@ -149,6 +163,32 @@ if __name__ == '__main__':
                         help='Optional phase-2 syntax/LM loss weight for sem_first/syn_first.')
     parser.add_argument('--skip_syntactic_bootstrapping', action='store_true',
                         help='Skip syntactic bootstrapping evaluation and data split')
+
+    parser.add_argument('--use_structural_negatives', action='store_true',
+                        help='Add structural-negative term: the matching loss with a shuffled parse '
+                             'should be higher than with the real parse by --struct_neg_margin.')
+    parser.add_argument('--struct_neg_margin', type=float, default=0.1,
+                        help='Margin for the structural-negatives hinge loss.')
+    parser.add_argument('--struct_neg_weight', type=float, default=1.0,
+                        help='Weight on the structural-negatives loss term.')
+
+    parser.add_argument('--use_mi_regularizer', action='store_true',
+                        help='Add MI-style regularizer: the matching loss with the real parse '
+                             'should beat the uniform-marginals baseline by --mi_margin.')
+    parser.add_argument('--mi_margin', type=float, default=0.1,
+                        help='Margin for the MI regularizer hinge loss.')
+    parser.add_argument('--mi_weight', type=float, default=1.0,
+                        help='Weight on the MI regularizer loss term.')
+
+    parser.add_argument('--use_temperature_annealing', action='store_true',
+                        help='Anneal the PCFG softmax temperature from --temp_start to --temp_end '
+                             'linearly over the first half of training.')
+    parser.add_argument('--temp_start', type=float, default=2.0,
+                        help='Initial PCFG softmax temperature (higher = flatter tree distribution).')
+    parser.add_argument('--temp_end', type=float, default=1.0,
+                        help='Final PCFG softmax temperature.')
+    parser.add_argument('--temp_anneal_frac', type=float, default=0.5,
+                        help='Fraction of num_epochs over which to linearly anneal the temperature.')
 
     opt = parser.parse_args()
     np.random.seed(opt.seed)
