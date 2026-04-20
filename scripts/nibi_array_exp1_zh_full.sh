@@ -31,6 +31,7 @@ PHASE1_VSE_MT_ALPHA="${PHASE1_VSE_MT_ALPHA:-}"
 PHASE1_VSE_LM_ALPHA="${PHASE1_VSE_LM_ALPHA:-}"
 PHASE2_VSE_MT_ALPHA="${PHASE2_VSE_MT_ALPHA:-}"
 PHASE2_VSE_LM_ALPHA="${PHASE2_VSE_LM_ALPHA:-}"
+NUM_EPOCHS="${NUM_EPOCHS:-30}"
 RESUME_ARG=()
 if [ "$USE_RESUME" = "1" ]; then
   RESUME_ARG+=(--resume)
@@ -75,7 +76,7 @@ elif [ "$MODEL" = "visual-labels" ]; then
 fi
 
 python ./as_train.py \
-  --num_epochs 30 \
+  --num_epochs "$NUM_EPOCHS" \
   --encoder_file "$ENCODER_FILE" \
   --img_dim "$IMG_DIM" \
   --visual_mode \
