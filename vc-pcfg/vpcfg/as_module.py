@@ -31,6 +31,7 @@ class CompoundCFG(torch.nn.Module):
         self.z_dim = z_dim
         self.s_dim = s_dim
         self.temperature = 1.0
+        self.temp_mode = 'all'  # 'all' or 'rule_only'
 
         self.root_emb = nn.Parameter(torch.randn(1, s_dim))
         self.term_emb = nn.Parameter(torch.randn(T, s_dim))
@@ -86,12 +87,20 @@ class CompoundCFG(torch.nn.Module):
         self.z = z
 
         temp = max(1e-4, float(self.temperature))
+        if self.temp_mode == 'rule_only':
+            root_temp = 1.0
+            term_temp = 1.0
+            rule_temp = temp
+        else:  # 'all'
+            root_temp = temp
+            term_temp = temp
+            rule_temp = temp
 
         def roots():
             root_emb = self.root_emb.expand(b, self.s_dim)
             if self.z_dim > 0:
                 root_emb = torch.cat([root_emb, self.z], -1)
-            root_prob = F.log_softmax(self.root_mlp(root_emb) / temp, -1)
+            root_prob = F.log_softmax(self.root_mlp(root_emb) / root_temp, -1)
             return root_prob
         
         def terms():
@@ -103,7 +112,7 @@ class CompoundCFG(torch.nn.Module):
                     b, n, self.T, self.z_dim
                 )
                 term_emb = torch.cat([term_emb, z_expand], -1)
-            term_prob = F.log_softmax(self.term_mlp(term_emb) / temp, -1)
+            term_prob = F.log_softmax(self.term_mlp(term_emb) / term_temp, -1)
             indices = x.unsqueeze(2).expand(b, n, self.T).unsqueeze(3)
             term_prob = torch.gather(term_prob, 3, indices).squeeze(3)
             return term_prob
@@ -117,7 +126,7 @@ class CompoundCFG(torch.nn.Module):
                     b, self.NT, self.z_dim
                 )
                 nonterm_emb = torch.cat([nonterm_emb, z_expand], -1)
-            rule_prob = F.log_softmax(self.rule_mlp(nonterm_emb) / temp, -1)
+            rule_prob = F.log_softmax(self.rule_mlp(nonterm_emb) / rule_temp, -1)
             rule_prob = rule_prob.view(b, self.NT, self.NT_T, self.NT_T)
             return rule_prob
 

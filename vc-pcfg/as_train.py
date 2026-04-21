@@ -28,7 +28,21 @@ def train(opt, train_loader, model, epoch, val_loader=None):
         frac = min(1.0, max(0.0, epoch / anneal_span))
         new_temp = opt.temp_start + (opt.temp_end - opt.temp_start) * frac
         model.parser.temperature = float(new_temp)
-        logger.info(f"Epoch [{epoch}] PCFG temperature set to {new_temp:.4f}")
+        model.parser.temp_mode = getattr(opt, 'temp_mode', 'all')
+        logger.info(
+            f"Epoch [{epoch}] PCFG temperature set to {new_temp:.4f} "
+            f"(mode={model.parser.temp_mode})"
+        )
+
+    if getattr(opt, 'use_entropy_bonus', False):
+        anneal_span = max(1.0, opt.num_epochs * opt.entropy_anneal_frac)
+        frac = min(1.0, max(0.0, epoch / anneal_span))
+        current_w = opt.entropy_weight * (1.0 - frac)
+        model.entropy_weight = float(current_w)
+        logger.info(
+            f"Epoch [{epoch}] entropy bonus weight set to {current_w:.4f} "
+            f"(base={opt.entropy_weight}, anneal_frac={opt.entropy_anneal_frac})"
+        )
     for i, train_data in enumerate(train_loader):
         # Always reset to train mode
         model.train()
@@ -63,6 +77,10 @@ def train(opt, train_loader, model, epoch, val_loader=None):
             extra += f", StructNeg: {train_logger.meters['StructNeg-Loss'].avg:.4f}"
         if "MI-Loss" in train_logger.meters:
             extra += f", MI: {train_logger.meters['MI-Loss'].avg:.4f}"
+        if "Entropy" in train_logger.meters:
+            extra += f", Entropy: {train_logger.meters['Entropy'].avg:.4f}"
+        if "EntropyWeight" in train_logger.meters:
+            extra += f", EntW: {train_logger.meters['EntropyWeight'].val:.4f}"
         if "Temp" in train_logger.meters:
             extra += f", Temp: {train_logger.meters['Temp'].val:.3f}"
         logger.info(
@@ -176,9 +194,14 @@ if __name__ == '__main__':
                         help='Add MI-style regularizer: the matching loss with the real parse '
                              'should beat the uniform-marginals baseline by --mi_margin.')
     parser.add_argument('--mi_margin', type=float, default=0.1,
-                        help='Margin for the MI regularizer hinge loss.')
+                        help='Margin for the MI regularizer (only used when --mi_style=hinge).')
     parser.add_argument('--mi_weight', type=float, default=1.0,
                         help='Weight on the MI regularizer loss term.')
+    parser.add_argument('--mi_style', type=str, default='ratio',
+                        choices=['hinge', 'ratio', 'infonce'],
+                        help='MI regularizer form. "hinge": relu(margin+real-uniform) (old, inactive). '
+                             '"ratio": real/(real+uniform) in (0,1), always active. '
+                             '"infonce": -log(exp(-real)/(exp(-real)+exp(-uniform))), always active.')
 
     parser.add_argument('--use_temperature_annealing', action='store_true',
                         help='Anneal the PCFG softmax temperature from --temp_start to --temp_end '
@@ -189,6 +212,20 @@ if __name__ == '__main__':
                         help='Final PCFG softmax temperature.')
     parser.add_argument('--temp_anneal_frac', type=float, default=0.5,
                         help='Fraction of num_epochs over which to linearly anneal the temperature.')
+    parser.add_argument('--temp_mode', type=str, default='all',
+                        choices=['all', 'rule_only'],
+                        help='Which PCFG distributions to apply temperature to. '
+                             '"all": root+term+rule (old behavior). '
+                             '"rule_only": only the binary-rule distribution (preserves NLL, '
+                             'only perturbs tree shape).')
+
+    parser.add_argument('--use_entropy_bonus', action='store_true',
+                        help='Add a decaying entropy bonus on the parser span-category distribution. '
+                             'Prevents the parser from crystallizing too early.')
+    parser.add_argument('--entropy_weight', type=float, default=0.1,
+                        help='Initial weight on the entropy bonus (annealed to 0 over --entropy_anneal_frac).')
+    parser.add_argument('--entropy_anneal_frac', type=float, default=0.5,
+                        help='Fraction of num_epochs over which to linearly anneal the entropy weight to 0.')
 
     opt = parser.parse_args()
     np.random.seed(opt.seed)

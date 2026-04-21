@@ -38,10 +38,15 @@ STRUCT_NEG_WEIGHT="${STRUCT_NEG_WEIGHT:-}"
 USE_MI_REG="${USE_MI_REG:-0}"
 MI_MARGIN="${MI_MARGIN:-}"
 MI_WEIGHT="${MI_WEIGHT:-}"
+MI_STYLE="${MI_STYLE:-}"
 USE_TEMP_ANNEAL="${USE_TEMP_ANNEAL:-0}"
 TEMP_START="${TEMP_START:-}"
 TEMP_END="${TEMP_END:-}"
 TEMP_ANNEAL_FRAC="${TEMP_ANNEAL_FRAC:-}"
+TEMP_MODE="${TEMP_MODE:-}"
+USE_ENTROPY_BONUS="${USE_ENTROPY_BONUS:-0}"
+ENTROPY_WEIGHT="${ENTROPY_WEIGHT:-}"
+ENTROPY_ANNEAL_FRAC="${ENTROPY_ANNEAL_FRAC:-}"
 RESUME_ARG=()
 if [ "$USE_RESUME" = "1" ]; then
   RESUME_ARG+=(--resume)
@@ -72,12 +77,19 @@ if [ "$USE_MI_REG" = "1" ]; then
   EXTRA_OBJ_ARGS+=(--use_mi_regularizer)
   [ -n "$MI_MARGIN" ] && EXTRA_OBJ_ARGS+=(--mi_margin "$MI_MARGIN")
   [ -n "$MI_WEIGHT" ] && EXTRA_OBJ_ARGS+=(--mi_weight "$MI_WEIGHT")
+  [ -n "$MI_STYLE" ] && EXTRA_OBJ_ARGS+=(--mi_style "$MI_STYLE")
 fi
 if [ "$USE_TEMP_ANNEAL" = "1" ]; then
   EXTRA_OBJ_ARGS+=(--use_temperature_annealing)
   [ -n "$TEMP_START" ] && EXTRA_OBJ_ARGS+=(--temp_start "$TEMP_START")
   [ -n "$TEMP_END" ] && EXTRA_OBJ_ARGS+=(--temp_end "$TEMP_END")
   [ -n "$TEMP_ANNEAL_FRAC" ] && EXTRA_OBJ_ARGS+=(--temp_anneal_frac "$TEMP_ANNEAL_FRAC")
+  [ -n "$TEMP_MODE" ] && EXTRA_OBJ_ARGS+=(--temp_mode "$TEMP_MODE")
+fi
+if [ "$USE_ENTROPY_BONUS" = "1" ]; then
+  EXTRA_OBJ_ARGS+=(--use_entropy_bonus)
+  [ -n "$ENTROPY_WEIGHT" ] && EXTRA_OBJ_ARGS+=(--entropy_weight "$ENTROPY_WEIGHT")
+  [ -n "$ENTROPY_ANNEAL_FRAC" ] && EXTRA_OBJ_ARGS+=(--entropy_anneal_frac "$ENTROPY_ANNEAL_FRAC")
 fi
 
 SEEDS=(91 214 527 627 1018)

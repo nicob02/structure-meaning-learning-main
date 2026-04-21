@@ -33,6 +33,10 @@ class VGCPCFGs(object):
         self.use_mi_regularizer = getattr(opt, 'use_mi_regularizer', False)
         self.mi_margin = getattr(opt, 'mi_margin', 0.1)
         self.mi_weight = getattr(opt, 'mi_weight', 1.0)
+        self.mi_style = getattr(opt, 'mi_style', 'ratio')
+
+        self.use_entropy_bonus = getattr(opt, 'use_entropy_bonus', False)
+        self.entropy_weight = getattr(opt, 'entropy_weight', 0.1)
 
         self.loss_criterion = ContrastiveLoss(margin=opt.margin)
 
@@ -179,6 +183,7 @@ class VGCPCFGs(object):
 
         struct_neg_term = torch.tensor(0.0, device=nll.device)
         mi_term = torch.tensor(0.0, device=nll.device)
+        entropy_term = torch.tensor(0.0, device=nll.device)
         only_joint_path = not (self.sem_first and self.vse_lm_alpha == 0.0)
         if only_joint_path and (self.use_structural_negatives or self.use_mi_regularizer):
             N = lengths.max(0)[0]
@@ -199,15 +204,37 @@ class VGCPCFGs(object):
                 uniform_loss = self._expected_matching_loss(
                     img_emb, cap_span_features, uniform_margs, nstep
                 )
-                mi_term = F.relu(
-                    self.mi_margin + matching_loss - uniform_loss
-                ).sum()
+                if self.mi_style == 'hinge':
+                    mi_term = F.relu(
+                        self.mi_margin + matching_loss - uniform_loss
+                    ).sum()
+                elif self.mi_style == 'infonce':
+                    # -log(exp(-real) / (exp(-real) + exp(-uniform)))
+                    # Equivalent to softplus(uniform_loss - real_loss) semantically
+                    mi_per_sample = matching_loss + torch.logsumexp(
+                        torch.stack([-matching_loss, -uniform_loss], dim=0), dim=0
+                    )
+                    mi_term = mi_per_sample.sum()
+                else:  # 'ratio' (default): always in (0, 1)
+                    mi_per_sample = matching_loss / (matching_loss + uniform_loss + 1e-8)
+                    mi_term = mi_per_sample.sum()
+
+        if self.use_entropy_bonus and self.entropy_weight > 0.0:
+            # Entropy over nonterminal categories per span; encourages the parser
+            # to stay uncertain early in training (prevents crystallization).
+            log_probs = F.log_softmax(span_margs, dim=-1)
+            probs = log_probs.exp()
+            entropy_per_span = -(probs * log_probs).sum(-1)  # (b, nstep)
+            mean_entropy = entropy_per_span.mean()
+            # Subtract to maximize entropy.
+            entropy_term = -mean_entropy * bsize
 
         loss = (
             self.vse_mt_alpha * mt_loss
             + self.vse_lm_alpha * (ll_loss + kl_loss)
             + self.struct_neg_weight * struct_neg_term
             + self.mi_weight * mi_term
+            + self.entropy_weight * entropy_term
         ) / bsize
 
         self.optimizer.zero_grad()
@@ -224,6 +251,10 @@ class VGCPCFGs(object):
             self.logger.update('StructNeg-Loss', struct_neg_term.item() / bsize, bsize)
         if self.use_mi_regularizer:
             self.logger.update('MI-Loss', mi_term.item() / bsize, bsize)
+        if self.use_entropy_bonus:
+            # Log positive entropy (higher = more uncertain = good early in training).
+            self.logger.update('Entropy', -entropy_term.item() / bsize, bsize)
+            self.logger.update('EntropyWeight', float(self.entropy_weight))
         if hasattr(self.parser, 'temperature'):
             self.logger.update('Temp', float(self.parser.temperature))
 
