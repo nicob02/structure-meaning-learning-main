@@ -30,6 +30,7 @@ class VGCPCFGs(object):
         self.use_structural_negatives = getattr(opt, 'use_structural_negatives', False)
         self.struct_neg_margin = getattr(opt, 'struct_neg_margin', 0.1)
         self.struct_neg_weight = getattr(opt, 'struct_neg_weight', 1.0)
+        self.struct_neg_style = getattr(opt, 'struct_neg_style', 'hinge')
         self.use_mi_regularizer = getattr(opt, 'use_mi_regularizer', False)
         self.mi_margin = getattr(opt, 'mi_margin', 0.1)
         self.mi_weight = getattr(opt, 'mi_weight', 1.0)
@@ -37,6 +38,7 @@ class VGCPCFGs(object):
 
         self.use_entropy_bonus = getattr(opt, 'use_entropy_bonus', False)
         self.entropy_weight = getattr(opt, 'entropy_weight', 0.1)
+        self.entropy_mode = getattr(opt, 'entropy_mode', 'category')
 
         self.loss_criterion = ContrastiveLoss(margin=opt.margin)
 
@@ -56,8 +58,23 @@ class VGCPCFGs(object):
         self.all_params += list(self.txt_enc.parameters())
         self.all_params += list(self.parser.parameters())
         self.all_params += list(self.img_enc.parameters())
+
+        # Per-module learning rates. Default: each falls back to opt.lr,
+        # matching the original single-LR Adam exactly.
+        lr_parser = getattr(opt, 'lr_parser', None) or opt.lr
+        lr_txt_enc = getattr(opt, 'lr_txt_enc', None) or opt.lr
+        lr_img_enc = getattr(opt, 'lr_img_enc', None) or opt.lr
+        param_groups = [
+            {'params': list(self.parser.parameters()), 'lr': lr_parser, 'name': 'parser'},
+            {'params': list(self.txt_enc.parameters()), 'lr': lr_txt_enc, 'name': 'txt_enc'},
+            {'params': list(self.img_enc.parameters()), 'lr': lr_img_enc, 'name': 'img_enc'},
+        ]
         self.optimizer = torch.optim.Adam(
-            self.all_params, lr=opt.lr, betas=(opt.beta1, opt.beta2)
+            param_groups, lr=opt.lr, betas=(opt.beta1, opt.beta2)
+        )
+        self.logger.info(
+            f"Adam per-group LRs: parser={lr_parser}, "
+            f"txt_enc={lr_txt_enc}, img_enc={lr_img_enc}"
         )
 
         if torch.cuda.is_available():
@@ -196,9 +213,16 @@ class VGCPCFGs(object):
                 shuffled_loss = self._expected_matching_loss(
                     img_emb, cap_span_features, shuffled_margs, nstep
                 )
-                struct_neg_term = F.relu(
-                    self.struct_neg_margin + matching_loss - shuffled_loss
-                ).sum()
+                if self.struct_neg_style == 'ratio':
+                    # Always-active continuous ratio form. Bounded in (0, 1).
+                    # Minimized when real << shuffled.
+                    struct_neg_term = (
+                        matching_loss / (matching_loss + shuffled_loss + 1e-8)
+                    ).sum()
+                else:  # 'hinge' (original)
+                    struct_neg_term = F.relu(
+                        self.struct_neg_margin + matching_loss - shuffled_loss
+                    ).sum()
             if self.use_mi_regularizer:
                 uniform_margs = torch.ones_like(span_margs) / span_margs.size(-1)
                 uniform_loss = self._expected_matching_loss(
@@ -220,12 +244,23 @@ class VGCPCFGs(object):
                     mi_term = mi_per_sample.sum()
 
         if self.use_entropy_bonus and self.entropy_weight > 0.0:
-            # Entropy over nonterminal categories per span; encourages the parser
-            # to stay uncertain early in training (prevents crystallization).
-            log_probs = F.log_softmax(span_margs, dim=-1)
-            probs = log_probs.exp()
-            entropy_per_span = -(probs * log_probs).sum(-1)  # (b, nstep)
-            mean_entropy = entropy_per_span.mean()
+            if self.entropy_mode == 'boundary':
+                # Entropy over which spans the parser thinks are constituents.
+                # span_existence[b, k] = total mass on span k being a constituent of
+                # any category. Normalize across spans → distribution; entropy of that.
+                # High entropy ⇔ parser uncertain about boundary structure.
+                span_existence = span_margs.sum(-1).clamp(min=1e-8)  # (b, nstep)
+                Z = span_existence.sum(-1, keepdim=True) + 1e-8
+                p = span_existence / Z  # (b, nstep), sums to 1 per sentence
+                logp = (p + 1e-10).log()
+                entropy_per_sent = -(p * logp).sum(-1)  # (b,)
+                mean_entropy = entropy_per_sent.mean()
+            else:  # 'category' (original)
+                # Entropy over nonterminal categories per span.
+                log_probs = F.log_softmax(span_margs, dim=-1)
+                probs = log_probs.exp()
+                entropy_per_span = -(probs * log_probs).sum(-1)  # (b, nstep)
+                mean_entropy = entropy_per_span.mean()
             # Subtract to maximize entropy.
             entropy_term = -mean_entropy * bsize
 

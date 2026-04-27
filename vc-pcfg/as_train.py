@@ -189,6 +189,11 @@ if __name__ == '__main__':
                         help='Margin for the structural-negatives hinge loss.')
     parser.add_argument('--struct_neg_weight', type=float, default=1.0,
                         help='Weight on the structural-negatives loss term.')
+    parser.add_argument('--struct_neg_style', type=str, default='hinge',
+                        choices=['hinge', 'ratio'],
+                        help='Form of the structural-negatives loss. '
+                             '"hinge": relu(margin + real - shuffled) (original, dead-zone risk). '
+                             '"ratio": real/(real+shuffled) in (0,1), always active.')
 
     parser.add_argument('--use_mi_regularizer', action='store_true',
                         help='Add MI-style regularizer: the matching loss with the real parse '
@@ -220,12 +225,28 @@ if __name__ == '__main__':
                              'only perturbs tree shape).')
 
     parser.add_argument('--use_entropy_bonus', action='store_true',
-                        help='Add a decaying entropy bonus on the parser span-category distribution. '
+                        help='Add a decaying entropy bonus on the parser span distribution. '
                              'Prevents the parser from crystallizing too early.')
     parser.add_argument('--entropy_weight', type=float, default=0.1,
                         help='Initial weight on the entropy bonus (annealed to 0 over --entropy_anneal_frac).')
     parser.add_argument('--entropy_anneal_frac', type=float, default=0.5,
                         help='Fraction of num_epochs over which to linearly anneal the entropy weight to 0.')
+    parser.add_argument('--entropy_mode', type=str, default='category',
+                        choices=['category', 'boundary'],
+                        help='Which distribution the entropy bonus targets. '
+                             '"category": entropy over nonterminal labels per span (old). '
+                             '"boundary": entropy over which spans are constituents '
+                             '(targets boundary crystallization directly).')
+
+    parser.add_argument('--lr_parser', type=float, default=None,
+                        help='Per-module learning rate for the PCFG parser. '
+                             'Defaults to --lr if unset.')
+    parser.add_argument('--lr_txt_enc', type=float, default=None,
+                        help='Per-module learning rate for the text encoder (biLSTM + word emb). '
+                             'Defaults to --lr if unset.')
+    parser.add_argument('--lr_img_enc', type=float, default=None,
+                        help='Per-module learning rate for the image encoder MLP. '
+                             'Defaults to --lr if unset.')
 
     opt = parser.parse_args()
     np.random.seed(opt.seed)

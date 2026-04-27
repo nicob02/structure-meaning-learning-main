@@ -35,6 +35,7 @@ NUM_EPOCHS="${NUM_EPOCHS:-30}"
 USE_STRUCT_NEG="${USE_STRUCT_NEG:-0}"
 STRUCT_NEG_MARGIN="${STRUCT_NEG_MARGIN:-}"
 STRUCT_NEG_WEIGHT="${STRUCT_NEG_WEIGHT:-}"
+STRUCT_NEG_STYLE="${STRUCT_NEG_STYLE:-}"
 USE_MI_REG="${USE_MI_REG:-0}"
 MI_MARGIN="${MI_MARGIN:-}"
 MI_WEIGHT="${MI_WEIGHT:-}"
@@ -47,6 +48,7 @@ TEMP_MODE="${TEMP_MODE:-}"
 USE_ENTROPY_BONUS="${USE_ENTROPY_BONUS:-0}"
 ENTROPY_WEIGHT="${ENTROPY_WEIGHT:-}"
 ENTROPY_ANNEAL_FRAC="${ENTROPY_ANNEAL_FRAC:-}"
+ENTROPY_MODE="${ENTROPY_MODE:-}"
 RESUME_ARG=()
 if [ "$USE_RESUME" = "1" ]; then
   RESUME_ARG+=(--resume)
@@ -72,6 +74,7 @@ if [ "$USE_STRUCT_NEG" = "1" ]; then
   EXTRA_OBJ_ARGS+=(--use_structural_negatives)
   [ -n "$STRUCT_NEG_MARGIN" ] && EXTRA_OBJ_ARGS+=(--struct_neg_margin "$STRUCT_NEG_MARGIN")
   [ -n "$STRUCT_NEG_WEIGHT" ] && EXTRA_OBJ_ARGS+=(--struct_neg_weight "$STRUCT_NEG_WEIGHT")
+  [ -n "$STRUCT_NEG_STYLE" ] && EXTRA_OBJ_ARGS+=(--struct_neg_style "$STRUCT_NEG_STYLE")
 fi
 if [ "$USE_MI_REG" = "1" ]; then
   EXTRA_OBJ_ARGS+=(--use_mi_regularizer)
@@ -90,7 +93,15 @@ if [ "$USE_ENTROPY_BONUS" = "1" ]; then
   EXTRA_OBJ_ARGS+=(--use_entropy_bonus)
   [ -n "$ENTROPY_WEIGHT" ] && EXTRA_OBJ_ARGS+=(--entropy_weight "$ENTROPY_WEIGHT")
   [ -n "$ENTROPY_ANNEAL_FRAC" ] && EXTRA_OBJ_ARGS+=(--entropy_anneal_frac "$ENTROPY_ANNEAL_FRAC")
+  [ -n "$ENTROPY_MODE" ] && EXTRA_OBJ_ARGS+=(--entropy_mode "$ENTROPY_MODE")
 fi
+
+LR_PARSER="${LR_PARSER:-}"
+LR_TXT_ENC="${LR_TXT_ENC:-}"
+LR_IMG_ENC="${LR_IMG_ENC:-}"
+[ -n "$LR_PARSER" ] && EXTRA_OBJ_ARGS+=(--lr_parser "$LR_PARSER")
+[ -n "$LR_TXT_ENC" ] && EXTRA_OBJ_ARGS+=(--lr_txt_enc "$LR_TXT_ENC")
+[ -n "$LR_IMG_ENC" ] && EXTRA_OBJ_ARGS+=(--lr_img_enc "$LR_IMG_ENC")
 
 SEEDS=(91 214 527 627 1018)
 MODELS=("joint" "sem-first" "syn-first" "visual-labels")
