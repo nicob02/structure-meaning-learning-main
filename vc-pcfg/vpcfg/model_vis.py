@@ -247,12 +247,18 @@ class VGCPCFGs(object):
             if self.entropy_mode == 'boundary':
                 # Entropy over which spans the parser thinks are constituents.
                 # span_existence[b, k] = total mass on span k being a constituent of
-                # any category. Normalize across spans → distribution; entropy of that.
-                # High entropy ⇔ parser uncertain about boundary structure.
+                # any nonterminal label.
+                # The root span (full sentence) is *always* a constituent in any
+                # binary tree, so its existence mass is exactly 1.0 by construction
+                # — independent of the parser. If we don't mask it, the normalized
+                # distribution collapses onto the root and entropy reads ~0.
+                # Mask by value: only the root has span_existence ≈ 1.0 deterministically.
                 span_existence = span_margs.sum(-1).clamp(min=1e-8)  # (b, nstep)
+                root_mask = (span_existence < 0.999).to(span_existence.dtype)
+                span_existence = span_existence * root_mask
                 Z = span_existence.sum(-1, keepdim=True) + 1e-8
-                p = span_existence / Z  # (b, nstep), sums to 1 per sentence
-                logp = (p + 1e-10).log()
+                p = span_existence / Z  # (b, nstep), sums to ~1 per sentence
+                logp = (p + 1e-10).log()  # 1e-10 keeps masked cells finite
                 entropy_per_sent = -(p * logp).sum(-1)  # (b,)
                 mean_entropy = entropy_per_sent.mean()
             else:  # 'category' (original)
