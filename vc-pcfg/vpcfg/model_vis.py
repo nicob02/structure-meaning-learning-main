@@ -253,9 +253,22 @@ class VGCPCFGs(object):
                 # — independent of the parser. If we don't mask it, the normalized
                 # distribution collapses onto the root and entropy reads ~0.
                 # Mask by value: only the root has span_existence ≈ 1.0 deterministically.
-                span_existence = span_margs.sum(-1).clamp(min=1e-8)  # (b, nstep)
-                root_mask = (span_existence < 0.999).to(span_existence.dtype)
-                span_existence = span_existence * root_mask
+                span_existence_raw = span_margs.sum(-1).clamp(min=1e-8)  # (b, nstep)
+                if not getattr(self, '_dbg_boundary_done', False):
+                    self._dbg_boundary_done = True
+                    se0 = span_existence_raw[0].detach().cpu()
+                    sorted_se, _ = se0.sort(descending=True)
+                    self.logger.info(
+                        f"DEBUG boundary[0]: len={se0.size(0)}, "
+                        f"min={se0.min().item():.6f}, "
+                        f"max={se0.max().item():.6f}, "
+                        f"mean={se0.mean().item():.6f}, "
+                        f"sum={se0.sum().item():.4f}, "
+                        f"top5={[round(x, 4) for x in sorted_se[:5].tolist()]}, "
+                        f"bot5={[round(x, 6) for x in sorted_se[-5:].tolist()]}"
+                    )
+                root_mask = (span_existence_raw < 0.999).to(span_existence_raw.dtype)
+                span_existence = span_existence_raw * root_mask
                 Z = span_existence.sum(-1, keepdim=True) + 1e-8
                 p = span_existence / Z  # (b, nstep), sums to ~1 per sentence
                 logp = (p + 1e-10).log()  # 1e-10 keeps masked cells finite
