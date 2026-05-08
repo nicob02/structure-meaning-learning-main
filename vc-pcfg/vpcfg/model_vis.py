@@ -40,6 +40,9 @@ class VGCPCFGs(object):
         self.entropy_weight = getattr(opt, 'entropy_weight', 0.1)
         self.entropy_mode = getattr(opt, 'entropy_mode', 'category')
 
+        # Anti-crystallization knobs (zero by default; opt-in).
+        self.parser_grad_noise = getattr(opt, 'parser_grad_noise', 0.0)
+
         self.loss_criterion = ContrastiveLoss(margin=opt.margin)
 
         self.parser = CompoundCFG(
@@ -295,6 +298,17 @@ class VGCPCFGs(object):
         loss.backward()
         if self.grad_clip > 0:
             clip_grad_norm_(self.all_params, self.grad_clip)
+        # Gradient noise injection on the parser only.
+        # Adds Gaussian noise to parser gradients to keep them stochastic and
+        # discourage early commitment to a single tree topology. Noise scale
+        # decays with global step so it's strong early and gentle late.
+        if getattr(self, 'parser_grad_noise', 0.0) > 0.0:
+            decay = 1.0 / ((1 + getattr(self, '_step', 0)) ** 0.55)
+            sigma = float(self.parser_grad_noise) * decay
+            for p in self.parser.parameters():
+                if p.grad is not None:
+                    p.grad.add_(torch.randn_like(p.grad) * sigma)
+            self._step = getattr(self, '_step', 0) + 1
         self.optimizer.step()
 
         self.logger.update('Loss', loss.item(), bsize)

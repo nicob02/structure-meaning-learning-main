@@ -99,9 +99,13 @@ fi
 LR_PARSER="${LR_PARSER:-}"
 LR_TXT_ENC="${LR_TXT_ENC:-}"
 LR_IMG_ENC="${LR_IMG_ENC:-}"
+PARSER_GRAD_NOISE="${PARSER_GRAD_NOISE:-}"
+BATCH_SIZE="${BATCH_SIZE:-}"
 [ -n "$LR_PARSER" ] && EXTRA_OBJ_ARGS+=(--lr_parser "$LR_PARSER")
 [ -n "$LR_TXT_ENC" ] && EXTRA_OBJ_ARGS+=(--lr_txt_enc "$LR_TXT_ENC")
 [ -n "$LR_IMG_ENC" ] && EXTRA_OBJ_ARGS+=(--lr_img_enc "$LR_IMG_ENC")
+[ -n "$PARSER_GRAD_NOISE" ] && EXTRA_OBJ_ARGS+=(--parser_grad_noise "$PARSER_GRAD_NOISE")
+[ -n "$BATCH_SIZE" ] && EXTRA_OBJ_ARGS+=(--batch_size "$BATCH_SIZE")
 
 SEEDS=(91 214 527 627 1018)
 MODELS=("joint" "sem-first" "syn-first" "visual-labels")

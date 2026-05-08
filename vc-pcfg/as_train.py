@@ -238,6 +238,11 @@ if __name__ == '__main__':
                              '"boundary": entropy over which spans are constituents '
                              '(targets boundary crystallization directly).')
 
+    parser.add_argument('--parser_grad_noise', type=float, default=0.0,
+                        help='Std of Gaussian noise injected into parser gradients each step. '
+                             'Decays with step ~ step^-0.55 (Neelakantan et al. 2015). '
+                             '0.0 disables (default). Try 0.01, 0.03, 0.1.')
+
     parser.add_argument('--lr_parser', type=float, default=None,
                         help='Per-module learning rate for the PCFG parser. '
                              'Defaults to --lr if unset.')
