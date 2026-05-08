@@ -253,6 +253,25 @@ if __name__ == '__main__':
                         help='Per-module learning rate for the image encoder MLP. '
                              'Defaults to --lr if unset.')
 
+    parser.add_argument('--branching_weight', type=float, default=0.0,
+                        help='Weight on the soft "leftness" penalty: penalize the '
+                             'fraction of (non-trivial) constituent mass placed on '
+                             'spans starting at position 0. 0.0 disables (default). '
+                             'Try 0.5, 1.0, 2.0.')
+    parser.add_argument('--right_prior_weight', type=float, default=0.0,
+                        help='Weight on the right-edge prior: reward span_existence '
+                             'on spans ending at the last token of each sentence. '
+                             '0.0 disables (default). Try 0.5, 1.0, 2.0.')
+    parser.add_argument('--branching_init', type=float, default=0.0,
+                        help='Magnitude of the right-branching init bias added to '
+                             'rule_mlp.bias at construction time. 0.0 disables '
+                             '(default). Try 0.5, 1.0, 2.0.')
+    parser.add_argument('--branching_init_mode', type=str, default='right',
+                        choices=['right', 'left', 'none'],
+                        help='Direction of the rule_mlp init bias. "right" biases '
+                             'toward right-branching trees (default), "left" is a '
+                             'control that biases the wrong way, "none" disables.')
+
     opt = parser.parse_args()
     np.random.seed(opt.seed)
     torch.manual_seed(opt.seed)

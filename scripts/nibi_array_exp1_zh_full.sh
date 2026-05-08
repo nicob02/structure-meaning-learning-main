@@ -107,6 +107,16 @@ BATCH_SIZE="${BATCH_SIZE:-}"
 [ -n "$PARSER_GRAD_NOISE" ] && EXTRA_OBJ_ARGS+=(--parser_grad_noise "$PARSER_GRAD_NOISE")
 [ -n "$BATCH_SIZE" ] && EXTRA_OBJ_ARGS+=(--batch_size "$BATCH_SIZE")
 
+# Architectural priors against the left-branching attractor.
+BRANCHING_WEIGHT="${BRANCHING_WEIGHT:-}"
+RIGHT_PRIOR_WEIGHT="${RIGHT_PRIOR_WEIGHT:-}"
+BRANCHING_INIT="${BRANCHING_INIT:-}"
+BRANCHING_INIT_MODE="${BRANCHING_INIT_MODE:-}"
+[ -n "$BRANCHING_WEIGHT" ] && EXTRA_OBJ_ARGS+=(--branching_weight "$BRANCHING_WEIGHT")
+[ -n "$RIGHT_PRIOR_WEIGHT" ] && EXTRA_OBJ_ARGS+=(--right_prior_weight "$RIGHT_PRIOR_WEIGHT")
+[ -n "$BRANCHING_INIT" ] && EXTRA_OBJ_ARGS+=(--branching_init "$BRANCHING_INIT")
+[ -n "$BRANCHING_INIT_MODE" ] && EXTRA_OBJ_ARGS+=(--branching_init_mode "$BRANCHING_INIT_MODE")
+
 SEEDS=(91 214 527 627 1018)
 MODELS=("joint" "sem-first" "syn-first" "visual-labels")
 

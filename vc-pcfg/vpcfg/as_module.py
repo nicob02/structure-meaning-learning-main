@@ -58,6 +58,33 @@ class CompoundCFG(torch.nn.Module):
             if p.dim() > 1:
                 torch.nn.init.xavier_uniform_(p)
 
+    def apply_branching_init(self, init_bias=1.0, mode='right'):
+        """Add a structural prior to `rule_mlp.bias` at init time.
+
+        rule_mlp predicts logits for (B, C) child pairs of every parent A.
+        Indices 0..NT-1 are nonterminals (further-expanding); indices
+        NT..NT_T-1 are preterminals (terminate to a word). A right-branching
+        binary split (B = single preterminal, C = recursively-expanding
+        nonterminal) corresponds to (B in T-range, C in NT-range). Adding a
+        positive bias on those cells, and a symmetric negative bias on the
+        opposite (left-branching) pattern, biases the softmax over rules
+        toward right-branching at initialization. Training can override.
+
+        Args:
+            init_bias: magnitude of the bias added (pre-softmax logit). 0.5–2.
+            mode: 'right' (default), 'left' (control), or 'none' (disable).
+        """
+        if mode == 'none' or init_bias == 0.0:
+            return
+        bias_mat = torch.zeros(self.NT_T, self.NT_T)
+        sign = +1.0 if mode == 'right' else -1.0
+        # (B in T-range, C in NT-range): right-branching child pattern.
+        bias_mat[self.NT:, :self.NT] = sign * init_bias
+        # (B in NT-range, C in T-range): mirror left-branching pattern.
+        bias_mat[:self.NT, self.NT:] = -sign * init_bias
+        with torch.no_grad():
+            self.rule_mlp.bias.add_(bias_mat.flatten().to(self.rule_mlp.bias.device))
+
     def update_state_dict(self, new_state, strict=True):
         self.load_state_dict(new_state, strict=strict) 
 

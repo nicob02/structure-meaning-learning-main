@@ -43,6 +43,14 @@ class VGCPCFGs(object):
         # Anti-crystallization knobs (zero by default; opt-in).
         self.parser_grad_noise = getattr(opt, 'parser_grad_noise', 0.0)
 
+        # Anti-left-branching architectural priors (zero by default; opt-in).
+        # `branching_weight` penalizes mass on spans starting at 0 (left-bias).
+        # `right_prior_weight` rewards mass on spans ending at last token (right-bias).
+        self.branching_weight = getattr(opt, 'branching_weight', 0.0)
+        self.right_prior_weight = getattr(opt, 'right_prior_weight', 0.0)
+        # Cache of (start, end, width) for each flat span index, keyed by N.
+        self._span_idx_cache = {}
+
         self.loss_criterion = ContrastiveLoss(margin=opt.margin)
 
         self.parser = CompoundCFG(
@@ -52,6 +60,21 @@ class VGCPCFGs(object):
             z_dim = opt.z_dim,
             s_dim = opt.state_dim
         )
+        # Optional architectural prior on the rule_mlp bias to bias the
+        # parser toward right-branching trees at initialization. Training
+        # can override; this just shifts the starting point so the parser
+        # doesn't fall straight into the left-branching attractor.
+        branching_init = getattr(opt, 'branching_init', 0.0)
+        branching_init_mode = getattr(opt, 'branching_init_mode', 'right')
+        if branching_init != 0.0 and branching_init_mode != 'none':
+            self.parser.apply_branching_init(
+                init_bias=float(branching_init),
+                mode=str(branching_init_mode),
+            )
+            logger.info(
+                f"Applied branching init bias={branching_init} "
+                f"mode={branching_init_mode} to rule_mlp."
+            )
         word_emb = torch.nn.Embedding(len(vocab), opt.word_dim)
         torch.nn.init.xavier_uniform_(word_emb.weight)
 
@@ -138,6 +161,33 @@ class VGCPCFGs(object):
             parser_outs = self.forward_parser(captions, lengths)
             txt_outputs = self.txt_enc(captions, lengths, parser_outs[-3])
         return (img_emb, txt_outputs) + parser_outs
+
+    def _get_span_idx(self, N, device):
+        """Return (starts, ends, widths) tensors of shape (nstep,) for max length N.
+        Indexing matches `_forward_srnn` in as_module.py: width-major (k=1..N-1),
+        then start-major within each width. Used by the branching/right-prior
+        regularizers to map flat span index -> structural position.
+        """
+        Ni = int(N)
+        cache = self._span_idx_cache.get(Ni)
+        if cache is not None:
+            if cache[0].device == device:
+                return cache
+            cache = tuple(t.to(device) for t in cache)
+            self._span_idx_cache[Ni] = cache
+            return cache
+        starts, ends, widths = [], [], []
+        for k in range(1, Ni):  # k = width - 1, so width = k+1
+            for s in range(Ni - k):
+                starts.append(s)
+                ends.append(s + k)
+                widths.append(k + 1)
+        starts_t = torch.tensor(starts, device=device, dtype=torch.long)
+        ends_t = torch.tensor(ends, device=device, dtype=torch.long)
+        widths_t = torch.tensor(widths, device=device, dtype=torch.long)
+        cache = (starts_t, ends_t, widths_t)
+        self._span_idx_cache[Ni] = cache
+        return cache
 
     def _expected_matching_loss(self, img_emb, cap_span_features, span_margs, nstep):
         """Compute the expected span-level matching loss given arbitrary span_margs.
@@ -286,12 +336,62 @@ class VGCPCFGs(object):
             # Subtract to maximize entropy.
             entropy_term = -mean_entropy * bsize
 
+        # ---- Architectural priors against the left-branching attractor ----
+        # `branching_term`: penalize soft mass on spans starting at position 0
+        #   (left-edge constituents). Push the parser away from "everything
+        #   attaches to the leftmost prefix" trees.
+        # `right_prior_term`: reward soft mass on spans ending at the last
+        #   token (right-edge constituents). A right-branching tree has
+        #   exactly L-1 such spans (incl. root); a left-branching tree has 1.
+        # Both use the same (start, end, width) cache and the same masking
+        # logic that excludes (a) out-of-range spans for short sentences in
+        # the batch, and (b) the trivial root span whose marginal is 1.0.
+        branching_term = torch.tensor(0.0, device=nll.device)
+        right_prior_term = torch.tensor(0.0, device=nll.device)
+        if (self.branching_weight > 0.0) or (self.right_prior_weight > 0.0):
+            span_existence = span_margs.sum(-1).clamp(min=1e-8)  # (b, nstep)
+            Nmax = int(lengths.max().item())
+            starts_t, ends_t, widths_t = self._get_span_idx(Nmax, span_existence.device)
+            # Per-batch valid mask: ends_t[k] < lengths[b]  -> span k fits in sent b.
+            valid = ends_t.unsqueeze(0) < lengths.unsqueeze(1).to(ends_t.device)
+            # Exclude the root span of each sentence (width == lengths[b]).
+            not_root = widths_t.unsqueeze(0) < lengths.unsqueeze(1).to(widths_t.device)
+            nontrivial = valid & not_root  # (b, nstep)
+            ntf = nontrivial.to(span_existence.dtype)
+
+            if self.branching_weight > 0.0:
+                # Normalize span_existence over non-trivial spans, then sum
+                # the mass on left-edge spans. p_left ∈ [0, 1] per sentence.
+                se_masked = span_existence * ntf
+                Z = se_masked.sum(-1, keepdim=True) + 1e-8
+                p_span = se_masked / Z
+                left_mask = (starts_t.unsqueeze(0) == 0) & nontrivial
+                leftness = (p_span * left_mask.to(p_span.dtype)).sum(-1)  # (b,)
+                # Sum (mean later by /bsize) so it scales like the other terms.
+                branching_term = leftness.sum()
+
+            if self.right_prior_weight > 0.0:
+                # For each sentence b, right-edge non-root spans are those
+                # ending at lengths[b]-1 with width < lengths[b]. There are
+                # exactly lengths[b]-2 such spans for a length>=3 sentence.
+                last_idx = (lengths - 1).to(ends_t.device).unsqueeze(1)  # (b, 1)
+                right_edge = (ends_t.unsqueeze(0) == last_idx) & nontrivial
+                ref = right_edge.to(span_existence.dtype)
+                # Mean span_existence on right-edge spans -> in [0, 1].
+                right_mass = (span_existence * ref).sum(-1)
+                right_count = ref.sum(-1).clamp(min=1.0)
+                right_avg = right_mass / right_count  # (b,)
+                # Maximize right_avg => loss = -log(right_avg).
+                right_prior_term = -(right_avg + 1e-8).log().sum()
+
         loss = (
             self.vse_mt_alpha * mt_loss
             + self.vse_lm_alpha * (ll_loss + kl_loss)
             + self.struct_neg_weight * struct_neg_term
             + self.mi_weight * mi_term
             + self.entropy_weight * entropy_term
+            + self.branching_weight * branching_term
+            + self.right_prior_weight * right_prior_term
         ) / bsize
 
         self.optimizer.zero_grad()
@@ -325,6 +425,10 @@ class VGCPCFGs(object):
             self.logger.update('EntropyWeight', float(self.entropy_weight))
         if hasattr(self.parser, 'temperature'):
             self.logger.update('Temp', float(self.parser.temperature))
+        if self.branching_weight > 0.0:
+            self.logger.update('Leftness', branching_term.item() / bsize, bsize)
+        if self.right_prior_weight > 0.0:
+            self.logger.update('RightPrior', right_prior_term.item() / bsize, bsize)
 
         self.n_word += (lengths + 1).sum().item()
         self.n_sent += bsize
