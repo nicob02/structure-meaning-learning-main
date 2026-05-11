@@ -119,6 +119,12 @@ REVERSE_TEXT="${REVERSE_TEXT:-0}"
 [ -n "$BRANCHING_INIT_MODE" ] && EXTRA_OBJ_ARGS+=(--branching_init_mode "$BRANCHING_INIT_MODE")
 [ "$REVERSE_TEXT" = "1" ] && EXTRA_OBJ_ARGS+=(--reverse_text)
 
+# H2 test: SGD on parser instead of Adam.
+PARSER_OPTIM="${PARSER_OPTIM:-}"
+PARSER_SGD_MOMENTUM="${PARSER_SGD_MOMENTUM:-}"
+[ -n "$PARSER_OPTIM" ] && EXTRA_OBJ_ARGS+=(--parser_optim "$PARSER_OPTIM")
+[ -n "$PARSER_SGD_MOMENTUM" ] && EXTRA_OBJ_ARGS+=(--parser_sgd_momentum "$PARSER_SGD_MOMENTUM")
+
 SEEDS=(91 214 527 627 1018)
 MODELS=("joint" "sem-first" "syn-first" "visual-labels")
 

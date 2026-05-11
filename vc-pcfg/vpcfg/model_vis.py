@@ -90,18 +90,46 @@ class VGCPCFGs(object):
         lr_parser = getattr(opt, 'lr_parser', None) or opt.lr
         lr_txt_enc = getattr(opt, 'lr_txt_enc', None) or opt.lr
         lr_img_enc = getattr(opt, 'lr_img_enc', None) or opt.lr
-        param_groups = [
-            {'params': list(self.parser.parameters()), 'lr': lr_parser, 'name': 'parser'},
-            {'params': list(self.txt_enc.parameters()), 'lr': lr_txt_enc, 'name': 'txt_enc'},
-            {'params': list(self.img_enc.parameters()), 'lr': lr_img_enc, 'name': 'img_enc'},
-        ]
-        self.optimizer = torch.optim.Adam(
-            param_groups, lr=opt.lr, betas=(opt.beta1, opt.beta2)
-        )
-        self.logger.info(
-            f"Adam per-group LRs: parser={lr_parser}, "
-            f"txt_enc={lr_txt_enc}, img_enc={lr_img_enc}"
-        )
+
+        # Per-module optimizer choice. Default 'adam' replicates prior
+        # behavior. 'sgd_parser' uses plain SGD on the parser group and
+        # keeps Adam on the encoders. This tests H2: does Adam's
+        # per-parameter normalization amplify the parser's crystallization?
+        parser_optim = getattr(opt, 'parser_optim', 'adam')
+        parser_sgd_momentum = getattr(opt, 'parser_sgd_momentum', 0.0)
+
+        if parser_optim == 'sgd_parser':
+            # Two-optimizer setup: SGD on parser, Adam on encoders.
+            self.optimizer = torch.optim.Adam(
+                [
+                    {'params': list(self.txt_enc.parameters()), 'lr': lr_txt_enc, 'name': 'txt_enc'},
+                    {'params': list(self.img_enc.parameters()), 'lr': lr_img_enc, 'name': 'img_enc'},
+                ],
+                lr=opt.lr, betas=(opt.beta1, opt.beta2)
+            )
+            self._parser_optimizer = torch.optim.SGD(
+                self.parser.parameters(),
+                lr=lr_parser,
+                momentum=parser_sgd_momentum,
+            )
+            self.logger.info(
+                f"Optimizer: SGD on parser (lr={lr_parser}, momentum={parser_sgd_momentum}); "
+                f"Adam on txt_enc={lr_txt_enc}, img_enc={lr_img_enc}"
+            )
+        else:
+            param_groups = [
+                {'params': list(self.parser.parameters()), 'lr': lr_parser, 'name': 'parser'},
+                {'params': list(self.txt_enc.parameters()), 'lr': lr_txt_enc, 'name': 'txt_enc'},
+                {'params': list(self.img_enc.parameters()), 'lr': lr_img_enc, 'name': 'img_enc'},
+            ]
+            self.optimizer = torch.optim.Adam(
+                param_groups, lr=opt.lr, betas=(opt.beta1, opt.beta2)
+            )
+            self._parser_optimizer = None
+            self.logger.info(
+                f"Adam per-group LRs: parser={lr_parser}, "
+                f"txt_enc={lr_txt_enc}, img_enc={lr_img_enc}"
+            )
 
         if torch.cuda.is_available():
             cudnn.benchmark = False
@@ -127,6 +155,8 @@ class VGCPCFGs(object):
             self.NS_TXT_ENCODER: self.txt_enc.state_dict(),
             self.NS_OPTIMIZER: self.optimizer.state_dict(),
         }
+        if self._parser_optimizer is not None:
+            state_dict['parser_optimizer'] = self._parser_optimizer.state_dict()
         return state_dict
 
     def set_state_dict(self, state_dict):
@@ -134,6 +164,8 @@ class VGCPCFGs(object):
         self.img_enc.load_state_dict(state_dict[self.NS_IMG_ENCODER])
         self.txt_enc.load_state_dict(state_dict[self.NS_TXT_ENCODER])
         self.optimizer.load_state_dict(state_dict[self.NS_OPTIMIZER])
+        if self._parser_optimizer is not None and 'parser_optimizer' in state_dict:
+            self._parser_optimizer.load_state_dict(state_dict['parser_optimizer'])
 
     def norms(self):
         p_norm = sum([p.norm() ** 2 for p in self.all_params]).item() ** 0.5
@@ -395,6 +427,8 @@ class VGCPCFGs(object):
         ) / bsize
 
         self.optimizer.zero_grad()
+        if self._parser_optimizer is not None:
+            self._parser_optimizer.zero_grad()
         loss.backward()
         if self.grad_clip > 0:
             clip_grad_norm_(self.all_params, self.grad_clip)
@@ -410,6 +444,8 @@ class VGCPCFGs(object):
                     p.grad.add_(torch.randn_like(p.grad) * sigma)
             self._step = getattr(self, '_step', 0) + 1
         self.optimizer.step()
+        if self._parser_optimizer is not None:
+            self._parser_optimizer.step()
 
         self.logger.update('Loss', loss.item(), bsize)
         self.logger.update('MT-Loss', mt_loss.item() / bsize, bsize)

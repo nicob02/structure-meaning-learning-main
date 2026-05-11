@@ -278,6 +278,15 @@ if __name__ == '__main__':
                              'data-content-driven (would flip with reversal) or '
                              'architectural (would persist relative to reversed input).')
 
+    parser.add_argument('--parser_optim', type=str, default='adam',
+                        choices=['adam', 'sgd_parser'],
+                        help='"adam" (default): single Adam over all parameters. '
+                             '"sgd_parser": SGD on the PCFG parser, Adam on the '
+                             'encoders. Tests H2 (Adam amplifies crystallization).')
+    parser.add_argument('--parser_sgd_momentum', type=float, default=0.0,
+                        help='Momentum used when parser_optim=sgd_parser. 0.0 means '
+                             'vanilla SGD (cleanest test); 0.9 is a softer middle ground.')
+
     opt = parser.parse_args()
     np.random.seed(opt.seed)
     torch.manual_seed(opt.seed)

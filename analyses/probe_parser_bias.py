@@ -223,8 +223,23 @@ def main():
 
     os.makedirs(args.out_dir, exist_ok=True)
 
-    # Load vocab from data_path
+    # Load vocab from data_path. The pickle was created when `utils`
+    # was importable at top-level with a `Vocabulary` class. The local
+    # version lives in vpcfg.utils — register it under both names so
+    # pickle.load can resolve it regardless of how it was saved.
     import pickle
+    from vpcfg.utils import Vocabulary as _Vocabulary
+    import types
+    if 'utils' not in sys.modules or not hasattr(sys.modules['utils'], 'Vocabulary'):
+        _u = sys.modules.get('utils')
+        if _u is None or not isinstance(_u, types.ModuleType):
+            _u = types.ModuleType('utils')
+            sys.modules['utils'] = _u
+        _u.Vocabulary = _Vocabulary
+    import __main__
+    if not hasattr(__main__, 'Vocabulary'):
+        __main__.Vocabulary = _Vocabulary
+
     vocab_path = os.path.join(args.data_path, 'vocab_dict.pkl')
     if not os.path.exists(vocab_path):
         # Fallback: try parent (preprocessed) location
