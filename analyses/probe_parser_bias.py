@@ -265,7 +265,7 @@ def main():
 
         train_loader, _, _ = data.get_data_iters(
             args.data_path, args.prefix, vocab, args.batch_size, 0,
-            shuffle=False, sampler=False, tiny=False, one_shot=False,
+            shuffle=False, sampler=None, tiny=False, one_shot=False,
             encoder_file=args.encoder_file, img_dim=args.img_dim,
             use_syntactic_bootstrapping=False, reverse_text=False,
         )
