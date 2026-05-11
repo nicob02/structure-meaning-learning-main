@@ -143,8 +143,10 @@ def branching_summary(spans, length):
 
 def parse_one_loader(model, loader, max_sents):
     """Run model.forward_parser over a loader; return list of (length, spans)."""
+    import time
     out = []
     seen = 0
+    last_print = time.time()
     with torch.no_grad():
         for batch in loader:
             # collate_fun returns (images, captions, lengths, ids, gold_spans).
@@ -165,6 +167,11 @@ def parse_one_loader(model, loader, max_sents):
                 seen += 1
                 if seen >= max_sents:
                     return out
+            # Periodic progress feedback so a slow run doesn't look frozen.
+            now = time.time()
+            if now - last_print > 5.0:
+                print(f"    parsed {seen}/{max_sents} sentences", flush=True)
+                last_print = now
     return out
 
 
@@ -266,9 +273,12 @@ def main():
         train_loader, _, _ = data.get_data_iters(
             args.data_path, args.prefix, vocab, args.batch_size, 0,
             shuffle=False, sampler=None, tiny=False, one_shot=False,
+            load_img=False,  # We only parse text — skip the huge .npy load.
             encoder_file=args.encoder_file, img_dim=args.img_dim,
             use_syntactic_bootstrapping=False, reverse_text=False,
         )
+        print(f"  [s{seed}] dataset ready ({len(train_loader.dataset)} sents)",
+              flush=True)
 
         # Build model. The logger here is a stub — we don't need to write logs.
         import logging
