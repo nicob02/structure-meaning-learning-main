@@ -97,9 +97,15 @@ class SortedSequentialSampler(data.Sampler):
 class AsDataset(data.Dataset):
     def __init__(self, data_path, data_split, vocab,
                  load_img=True, encoder_file='all_as-resn-50.npy', img_dim=2048, batch_size=1, tiny=False,
-                 one_shot=False, sem_data=False, use_syntactic_bootstrapping=True):
+                 one_shot=False, sem_data=False, use_syntactic_bootstrapping=True,
+                 reverse_text=False):
         self.batch_size = batch_size
         self.vocab = vocab
+        # Reverse-text mode: returns each caption's tokens and gold spans
+        # reversed. Used to test whether the parser's left-branching bias is
+        # data-content-driven (would *flip* with reversal) or architectural
+        # (would *persist* relative to the reversed input).
+        self.reverse_text = reverse_text
         self.ids_captions_spans = list()
         self.test_ids_contrastive = {'transitive':[], 'intransitive':[]}
         max_length = TXT_MAX_LENGTH
@@ -160,6 +166,17 @@ class AsDataset(data.Dataset):
         caption = [self.vocab(token) for token in cap]
         caption = torch.tensor(caption)
         span = torch.tensor(span)
+        if self.reverse_text:
+            # Reverse the token order; remap each gold span (i, j) to
+            # (L-1-j, L-1-i) so the constituent structure is preserved
+            # under the reversal. F1 is computed in reversed-coordinate space.
+            L = caption.size(0)
+            caption = caption.flip(0)
+            if span.numel() > 0 and span.dim() == 2 and span.size(1) >= 2:
+                new_span = span.clone()
+                new_span[:, 0] = (L - 1) - span[:, 1]
+                new_span[:, 1] = (L - 1) - span[:, 0]
+                span = new_span
         return image, caption, idx, img_id, span
 
     def __len__(self):
@@ -266,14 +283,17 @@ def get_data_iters(data_path, data_split, vocab,
                     img_dim=2048,
                     tiny = False,
                     one_shot=True,
-                    use_syntactic_bootstrapping=True):
+                    use_syntactic_bootstrapping=True,
+                    reverse_text=False):
     dset = AsDataset(
         data_path, data_split, vocab, load_img, encoder_file, img_dim, batch_size,
-        tiny, one_shot=one_shot, use_syntactic_bootstrapping=use_syntactic_bootstrapping
+        tiny, one_shot=one_shot, use_syntactic_bootstrapping=use_syntactic_bootstrapping,
+        reverse_text=reverse_text,
     )
     dset_all = AsDataset(
         data_path, data_split, vocab, load_img, encoder_file, img_dim, batch_size,
-        tiny, one_shot=False, sem_data=True, use_syntactic_bootstrapping=use_syntactic_bootstrapping
+        tiny, one_shot=False, sem_data=True, use_syntactic_bootstrapping=use_syntactic_bootstrapping,
+        reverse_text=reverse_text,
     )
     if sampler:
         model = SortedRandomSampler

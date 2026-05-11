@@ -272,6 +272,12 @@ if __name__ == '__main__':
                              'toward right-branching trees (default), "left" is a '
                              'control that biases the wrong way, "none" disables.')
 
+    parser.add_argument('--reverse_text', action='store_true',
+                        help='Reverse caption tokens AND gold span endpoints during '
+                             'training/eval. Used to test whether the parser bias is '
+                             'data-content-driven (would flip with reversal) or '
+                             'architectural (would persist relative to reversed input).')
+
     opt = parser.parse_args()
     np.random.seed(opt.seed)
     torch.manual_seed(opt.seed)
@@ -362,7 +368,8 @@ if __name__ == '__main__':
         opt.data_path, opt.prefix, vocab, opt.batch_size, opt.workers,
         load_img=opt.visual_mode, encoder_file=opt.encoder_file, img_dim=opt.img_dim,
         shuffle=opt.shuffle, sampler=sampler, tiny=opt.tiny, one_shot=opt.one_shot,
-        use_syntactic_bootstrapping=not opt.skip_syntactic_bootstrapping
+        use_syntactic_bootstrapping=not opt.skip_syntactic_bootstrapping,
+        reverse_text=getattr(opt, 'reverse_text', False),
     )
     syn_items = 0 if syn_test_loader is None else syn_test_loader.dataset.length
     logger.info("Number of train items: {}, semantic test items: {}, syntactic test items: {}".format(train_loader.dataset.length, sem_test_loader.dataset.length, syn_items))
